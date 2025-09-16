@@ -1,15 +1,16 @@
-# PaddleOCR 圖片識別網站
+# PaddleOCR 文檔識別網站
 
-一個基於 FastAPI 和 PaddleOCR 的簡單圖片文字識別網站，允許用戶上傳圖片並提取指定的關鍵字。
+一個基於 FastAPI 和 PaddleOCR 的文檔識別網站，支援圖片和 PDF 檔案的文字識別與關鍵字提取。
 
 ## 功能特色
 
-- 🖼️ 支援多種圖片格式上傳
+- 🖼️ 支援多種圖片格式上傳（JPG、PNG、BMP等）
+- 📄 支援 PDF 檔案上傳和多頁處理
 - 🔍 基於 PaddleOCR 的高精度文字識別
 - 💬 智慧關鍵字提取功能
 - 🏷️ 預設關鍵字快速選擇（車輛、證件、公司、發票等分類）
 - 👁️ 完整的圖片識別資訊顯示（包含文字區塊和座標）
-- 📄 多頁面文件支援
+- 📑 多頁面文件支援
 - 🌐 簡潔美觀的網頁介面
 - 📊 JSON 格式的結構化回應
 - ⚙️ 可調整的處理設定選項
@@ -30,7 +31,7 @@ ollama serve
 
 1. 啟動網站：
 ```bash
-python web_app.py
+python app.py
 ```
 
 2. 開啟瀏覽器訪問：
@@ -39,7 +40,7 @@ http://localhost:8000
 ```
 
 3. 在網頁上：
-   - 選擇要識別的圖片檔案
+   - 選擇要識別的圖片或PDF檔案
    - 輸入需要提取的關鍵字（每行一個）
    - 選擇是否使用文檔方向分類和去彎曲功能
    - 點擊「上傳並識別」按鈕
@@ -55,7 +56,7 @@ http://localhost:8000
 處理圖片 OCR 請求
 
 **請求參數：**
-- `file`: 圖片檔案
+- `file`: 圖片或PDF檔案
 - `key_list`: JSON 格式的關鍵字列表
 - `use_doc_orientation_classify`: 是否使用文檔方向分類（布林值）
 - `use_doc_unwarping`: 是否使用文檔去彎曲（布林值）
@@ -95,7 +96,7 @@ http://localhost:8000
 
 ## 配置說明
 
-在 `web_app.py` 中，您可以修改以下配置：
+在 `app.py` 中，您可以修改以下配置：
 
 ```python
 chat_bot_config = {
@@ -111,7 +112,7 @@ chat_bot_config = {
 
 - 確保 PaddleOCR 和相關依賴正確安裝
 - 如果使用聊天功能，需要本地運行 Ollama 服務
-- 支援的圖片格式：JPG、PNG、BMP 等常見格式
+- 支援的檔案格式：JPG、PNG、BMP 等圖片格式以及 PDF 檔案
 - 臨時檔案會在處理完成後自動清理
 
 ## 故障排除
@@ -121,3 +122,25 @@ chat_bot_config = {
 2. Ollama 服務是否正常運行
 3. 圖片檔案格式是否支援
 4. 網路連線是否正常
+
+## 授權聲明
+
+本項目採用 MIT 授權。詳細資訊請見 [LICENSE](LICENSE) 檔案。
+
+### 第三方授權
+
+本項目使用了以下開源軟體：
+
+- **PaddleOCR** - Apache License 2.0
+  - 版權所有 (c) 2020 PaddlePaddle Authors
+  - 官方網站：https://github.com/PaddlePaddle/PaddleOCR
+  - 授權詳情：https://github.com/PaddlePaddle/PaddleOCR/blob/release/2.7/LICENSE
+
+### 致謝
+
+- 感謝 PaddlePaddle 團隊提供優秀的 OCR 解決方案
+- 本項目僅為 PaddleOCR 的網頁界面封裝，核心 OCR 功能由 PaddleOCR 提供
+
+## 免責聲明
+
+本軟體按「現狀」提供，不提供任何明示或暗示的保證。使用本軟體所產生的任何後果，作者不承擔責任。

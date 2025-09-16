@@ -1,0 +1,21 @@
+PaddleOCR Web Interface
+Copyright (c) 2025
+
+This product includes software developed by:
+- PaddlePaddle Authors (https://github.com/PaddlePaddle/PaddleOCR)
+
+Third-party software:
+================================================================================
+
+PaddleOCR
+  Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
+  Licensed under the Apache License, Version 2.0
+  Source: https://github.com/PaddlePaddle/PaddleOCR
+
+FastAPI
+  Copyright (c) 2018 Sebastián Ramírez
+  Licensed under the MIT License
+  Source: https://github.com/tiangolo/fastapi
+
+Other dependencies may be included as specified in requirements.txt
+Please refer to their respective licenses for usage terms.

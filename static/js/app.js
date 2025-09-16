@@ -1,4 +1,10 @@
-// PaddleOCR 前端應用程式主腳本
+/**
+ * PaddleOCR Web Interface - Frontend Application
+ * Copyright (c) 2025
+ * 
+ * This project provides a web interface for PaddleOCR.
+ * Core OCR functionality is provided by PaddleOCR (Apache License 2.0).
+ */
 
 // 狀態管理
 function updateStatus(status, message) {
@@ -14,11 +20,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化圖片modal功能
     initImageModal();
     
-    // 處理圖片文件選擇事件
+    // 處理檔案選擇事件
     document.getElementById('imageFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
-            previewImage(file);
+            previewFile(file);
         }
     });
     
@@ -76,25 +82,36 @@ function showButtonFeedback(button, type) {
     }, 300);
 }
 
-// 圖片預覽功能
-function previewImage(file) {
-    const reader = new FileReader();
+// 檔案預覽功能
+function previewFile(file) {
     const imagePreview = document.getElementById('imagePreview');
     const uploadedImage = document.getElementById('uploadedImage');
+    const pdfPreview = document.getElementById('pdfPreview');
     const imageFileName = document.getElementById('imageFileName');
     
-    reader.onload = function(e) {
-        uploadedImage.src = e.target.result;
-        uploadedImage.setAttribute('data-caption', file.name);
-        uploadedImage.classList.add('clickable-image');
-        imageFileName.textContent = `檔案名稱：${file.name}`;
-        imagePreview.style.display = 'block';
-        
-        // 為上傳的預覽圖片綁定點擊事件
-        bindImageClickEvents();
-    };
+    imageFileName.textContent = `檔案名稱：${file.name}`;
+    imagePreview.style.display = 'block';
     
-    reader.readAsDataURL(file);
+    // 檢查檔案類型
+    if (file.type.startsWith('image/')) {
+        // 處理圖片檔案
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            uploadedImage.src = e.target.result;
+            uploadedImage.setAttribute('data-caption', file.name);
+            uploadedImage.classList.add('clickable-image');
+            uploadedImage.style.display = 'block';
+            pdfPreview.style.display = 'none';
+            
+            // 為上傳的預覽圖片綁定點擊事件
+            bindImageClickEvents();
+        };
+        reader.readAsDataURL(file);
+    } else if (file.type === 'application/pdf') {
+        // 處理PDF檔案
+        uploadedImage.style.display = 'none';
+        pdfPreview.style.display = 'flex';
+    }
 }
 
 // 表單提交處理函數
@@ -112,7 +129,7 @@ async function handleFormSubmit(e) {
     const useLLM = document.getElementById('useLLM').checked;
     // 驗證輸入
     if (!fileInput.files[0]) {
-        alert('請選擇一個圖片檔案');
+        alert('請選擇一個圖片或PDF檔案');
         return;
     }
     
@@ -181,8 +198,8 @@ async function handleFormSubmit(e) {
 function createLoadingHTML() {
     return `
         <div class="loading">
-            <h3>📈 正在處理圖片</h3>
-            <p>請稍候，系統正在分析您的圖片並提取關鍵字...</p>
+            <h3>📈 正在處理檔案</h3>
+            <p>請稍候，系統正在分析您的檔案並提取關鍵字...</p>
         </div>
     `;
 }

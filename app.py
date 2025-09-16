@@ -1,3 +1,19 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+PaddleOCR Web Interface
+Copyright (c) 2025
+
+This project provides a web interface for PaddleOCR.
+This software uses PaddleOCR, which is licensed under Apache License 2.0.
+
+PaddleOCR Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
+Licensed under the Apache License, Version 2.0.
+See: https://github.com/PaddlePaddle/PaddleOCR
+
+本項目僅為 PaddleOCR 的網頁界面封裝，核心 OCR 功能由 PaddleOCR 提供。
+"""
+
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -62,8 +78,8 @@ async def process_ocr(
     """處理圖片 OCR 請求"""
     try:
         # 檢查檔案類型
-        if not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="請上傳有效的圖片檔案")
+        if not (file.content_type.startswith('image/') or file.content_type == 'application/pdf'):
+            raise HTTPException(status_code=400, detail="請上傳有效的圖片檔案或PDF檔案")
         
         # 解析關鍵字列表
         try:
@@ -103,39 +119,21 @@ async def process_ocr(
                 from pathlib import Path
                 temp_path = Path(temp_file_path)
                 input_stem = temp_path.stem
-                input_suffix = temp_path.suffix if temp_path.suffix in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff'] else '.png'
                 
-                # 獲取將要生成的圖片資訊
-                try:
-                    img_dict = layout_parsing_result._to_img()
-                    predicted_files = []
-                    
-                    # 根據save_to_img的檔案命名規則預測檔案名
-                    for key in img_dict.keys():
-                        predicted_filename = f"{input_stem}_{key}{input_suffix}"
-                        predicted_files.append(predicted_filename)
-                    
-                    # 執行保存操作
-                    layout_parsing_result.save_to_img(output_dir)
-                    
-                    # 驗證預測的檔案是否存在並添加到列表
-                    for predicted_filename in predicted_files:
-                        file_path = os.path.join(output_dir, predicted_filename)
-                        if os.path.exists(file_path):
-                            output_images.append(predicted_filename)
-                            print(f"成功生成檔案: {predicted_filename}")
+                # 獲取保存前的檔案列表
+                files_before = set(os.listdir(output_dir)) if os.path.exists(output_dir) else set()
                 
-                except Exception as e:
-                    # 如果精確預測失敗，回退到目錄比較法
-                    print(f"精確預測檔案名失敗，回退到目錄比較法: {e}")
-                    files_before = set(os.listdir(output_dir)) if os.path.exists(output_dir) else set()
-                    layout_parsing_result.save_to_img(output_dir)
-                    files_after = set(os.listdir(output_dir)) if os.path.exists(output_dir) else set()
-                    new_files = files_after - files_before
-                    
-                    for file_name in new_files:
-                        if file_name.endswith('.png'):
-                            output_images.append(file_name)
+                # 執行保存操作
+                layout_parsing_result.save_to_img(output_dir)
+                
+                # 獲取保存後的檔案列表
+                files_after = set(os.listdir(output_dir)) if os.path.exists(output_dir) else set()
+                new_files = files_after - files_before
+                
+                # 找出包含 input_stem 的新檔案
+                for file_name in new_files:
+                    if input_stem in file_name and file_name.endswith('.png'):
+                        output_images.append(file_name)
                
             # 執行聊天查詢
             if use_llm:
