@@ -1,0 +1,4 @@
+/.venv
+/output
+/PP-OCRv5_server_det.py
+/__pycache__
