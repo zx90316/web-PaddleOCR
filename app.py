@@ -24,6 +24,7 @@ import json
 import os
 import tempfile
 from paddlex import create_pipeline
+import shutil
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
@@ -31,8 +32,15 @@ app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並
 # 設定靜態檔案服務
 output_dir = "output"
 os.makedirs(output_dir, exist_ok=True)
+
+def clear_output_dir():
+    shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+clear_output_dir()
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/output", StaticFiles(directory="output"), name="output")
+app.mount("/output", StaticFiles(directory=output_dir), name="output")
 
 # 設定模板引擎
 templates = Jinja2Templates(directory="templates")
