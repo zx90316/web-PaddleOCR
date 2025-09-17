@@ -29,23 +29,19 @@ from paddlex import create_pipeline
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
 
 # 設定靜態檔案服務
+output_dir = "output"
+os.makedirs(output_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
 # 設定模板引擎
 templates = Jinja2Templates(directory="templates")
 
-# 聊天機器人配置
-chat_bot_config = {
-    "module_name": "chat_bot",
-    "model_name": "gemma3:4b",
-    "base_url": "http://localhost:11434/v1",
-    "api_type": "openai",
-    "api_key": "sk-123456789",  # your api_key
-}
-
 # 初始化 PaddleOCR 管線
-pipeline = create_pipeline(pipeline="PP-ChatOCRv4-doc", initial_predictor=False)
+pipeline = create_pipeline(
+    pipeline="./PP-ChatOCRv4-doc.yaml", 
+    initial_predictor=False
+    )
 
 # 請求模型
 class OCRRequest(BaseModel):
@@ -139,8 +135,7 @@ async def process_ocr(
             if use_llm:
                 chat_result = pipeline.chat(
                     key_list=key_list_parsed,
-                    visual_info=visual_info_list,
-                    chat_bot_config=chat_bot_config,
+                    visual_info=visual_info_list
                 )
             
             # 組合回應資料，包含聊天結果和視覺資訊
@@ -180,5 +175,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     print("🚀 啟動 PaddleOCR 網站服務...")
-    print("🌐 請訪問: http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("🌐 請訪問: http://localhost:8080")
+    uvicorn.run(app, host="0.0.0.0", port=8080)
