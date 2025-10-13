@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<!--
+PaddleOCR Web Interface - Task Detail
+Copyright (c) 2025
+-->
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任務詳情 - {{ task.task_id }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .detail-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .detail-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .detail-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+        }
+        .task-id-display {
+            font-family: monospace;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .info-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .info-card h2 {
+            margin-top: 0;
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .info-item {
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            color: #333;
+            font-size: 15px;
+        }
+        .output-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .output-image-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        .output-image-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .output-image-card img {
+            width: 100%;
+            display: block;
+        }
+        .output-image-label {
+            padding: 10px;
+            background: #f9f9f9;
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+        }
+        .json-viewer {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .status-active {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .status-deleted {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+        .chat-result {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+            margin-top: 15px;
+        }
+        .chat-result-item {
+            margin-bottom: 12px;
+        }
+        .chat-result-key {
+            font-weight: 600;
+            color: #1976D2;
+        }
+        .chat-result-value {
+            color: #333;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="detail-container">
+        <a href="/admin" class="back-link">← 返回管理後台</a>
+
+        <div class="detail-header">
+            <h1>📋 任務詳情</h1>
+            <div class="task-id-display">任務 ID: {{ task.task_id }}</div>
+        </div>
+
+        <!-- 基本資訊 -->
+        <div class="info-card">
+            <h2>📊 基本資訊</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">檔案名稱</div>
+                    <div class="info-value">{{ task.original_filename }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">檔案類型</div>
+                    <div class="info-value">{{ '📄 PDF' if task.file_type == 'pdf' else '🖼️ 圖片' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">建立時間</div>
+                    <div class="info-value">{{ task.created_at }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">狀態</div>
+                    <div class="info-value">
+                        <span class="status-badge {{ 'status-deleted' if task.is_deleted else 'status-active' }}">
+                            {{ '已刪除' if task.is_deleted else '正常' }}
+                        </span>
+                    </div>
+                </div>
+                {% if task.matched_page_number %}
+                <div class="info-item">
+                    <div class="info-label">匹配頁碼</div>
+                    <div class="info-value">第 {{ task.matched_page_number }} 頁</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 處理設定 -->
+        {% if task.settings %}
+        <div class="info-card">
+            <h2>⚙️ 處理設定</h2>
+            <div class="info-grid">
+                {% for key, value in task.settings.items() %}
+                <div class="info-item">
+                    <div class="info-label">{{ key }}</div>
+                    <div class="info-value">{{ '✅ 是' if value else '❌ 否' }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- OCR 提取結果 -->
+        {% if response_data and response_data.chat_result %}
+        <div class="info-card">
+            <h2>🔍 關鍵字提取結果</h2>
+            <div class="chat-result">
+                {% for item in response_data.chat_result %}
+                <div class="chat-result-item">
+                    <span class="chat-result-key">{{ item.key }}:</span>
+                    <span class="chat-result-value">{{ item.value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 輸出圖片 -->
+        {% if response_data and response_data.output_images %}
+        <div class="info-card">
+            <h2>🖼️ 處理結果圖片</h2>
+            <div class="output-images">
+                {% for img_path in response_data.output_images %}
+                <div class="output-image-card">
+                    <img src="/output/{{ img_path }}" alt="輸出圖片">
+                    <div class="output-image-label">{{ img_path.split('/')[-1] }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 匹配頁面圖片 -->
+        {% if response_data and response_data.matched_page_path %}
+        <div class="info-card">
+            <h2>📄 匹配的頁面</h2>
+            <div class="output-images">
+                <div class="output-image-card">
+                    <img src="/output/{{ response_data.matched_page_path }}" alt="匹配頁面">
+                    <div class="output-image-label">{{ response_data.matched_page_path.split('/')[-1] }}</div>
+                </div>
+            </div>
+            {% if response_data.matching_score %}
+            <p style="margin-top: 15px; color: #666;">
+                <strong>匹配分數:</strong> {{ "%.4f"|format(response_data.matching_score) }}
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- 完整 JSON 資料 -->
+        {% if response_data %}
+        <div class="info-card">
+            <h2>📝 完整回應資料 (JSON)</h2>
+            <pre class="json-viewer">{{ response_data | tojson(indent=2, ensure_ascii=False) }}</pre>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

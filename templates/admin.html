@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<!--
+PaddleOCR Web Interface - Admin Panel
+Copyright (c) 2025
+-->
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaddleOCR 管理後台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .admin-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .admin-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+        .admin-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .task-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .task-table th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .task-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .task-table tr:hover {
+            background: #f5f5f5;
+        }
+        .task-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-view {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-view:hover {
+            background: #45a049;
+        }
+        .btn-delete {
+            background: #f44336;
+            color: white;
+        }
+        .btn-delete:hover {
+            background: #da190b;
+        }
+        .btn-refresh {
+            background: #2196F3;
+            color: white;
+            padding: 10px 20px;
+        }
+        .btn-refresh:hover {
+            background: #0b7dda;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-active {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .status-deleted {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .task-id {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <a href="/" class="back-link">← 返回首頁</a>
+
+        <div class="admin-header">
+            <h1>🛠️ OCR 任務管理後台</h1>
+            <p>查看、管理所有 OCR 處理任務</p>
+        </div>
+
+        <div class="admin-controls">
+            <button class="btn btn-refresh" onclick="loadTasks()">🔄 重新整理</button>
+            <label style="margin-left: auto;">
+                <input type="checkbox" id="showDeleted" onchange="loadTasks()">
+                顯示已刪除的任務
+            </label>
+        </div>
+
+        <div id="tasksContainer">
+            <div class="empty-state">
+                <h3>載入中...</h3>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 載入任務列表
+        async function loadTasks() {
+            const showDeleted = document.getElementById('showDeleted').checked;
+            const container = document.getElementById('tasksContainer');
+
+            try {
+                const response = await fetch(`/admin/tasks?include_deleted=${showDeleted}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    container.innerHTML = `<div class="empty-state"><h3>❌ 載入失敗</h3><p>${data.error}</p></div>`;
+                    return;
+                }
+
+                const tasks = data.tasks;
+
+                if (tasks.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><h3>📭 暫無任務記錄</h3><p>尚未處理任何 OCR 任務</p></div>';
+                    return;
+                }
+
+                // 建立表格
+                let tableHTML = `
+                    <table class="task-table">
+                        <thead>
+                            <tr>
+                                <th>任務 ID</th>
+                                <th>檔案名稱</th>
+                                <th>檔案類型</th>
+                                <th>建立時間</th>
+                                <th>頁碼</th>
+                                <th>狀態</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                tasks.forEach(task => {
+                    const statusClass = task.is_deleted ? 'status-deleted' : 'status-active';
+                    const statusText = task.is_deleted ? '已刪除' : '正常';
+                    const createdAt = new Date(task.created_at).toLocaleString('zh-TW');
+                    const pageNum = task.matched_page_number ? `第 ${task.matched_page_number} 頁` : '-';
+
+                    tableHTML += `
+                        <tr>
+                            <td><span class="task-id">${task.task_id}</span></td>
+                            <td>${task.original_filename}</td>
+                            <td>${task.file_type === 'pdf' ? '📄 PDF' : '🖼️ 圖片'}</td>
+                            <td>${createdAt}</td>
+                            <td>${pageNum}</td>
+                            <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                            <td class="task-actions">
+                                <button class="btn btn-view" onclick="viewTask('${task.task_id}')">查看</button>
+                                ${!task.is_deleted ? `<button class="btn btn-delete" onclick="deleteTask('${task.task_id}')">刪除</button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                tableHTML += '</tbody></table>';
+                container.innerHTML = tableHTML;
+
+            } catch (error) {
+                container.innerHTML = `<div class="empty-state"><h3>❌ 載入失敗</h3><p>${error.message}</p></div>`;
+            }
+        }
+
+        // 查看任務詳情
+        function viewTask(taskId) {
+            window.open(`/admin/task/${taskId}`, '_blank');
+        }
+
+        // 刪除任務
+        async function deleteTask(taskId) {
+            if (!confirm('確定要刪除此任務嗎？此操作將刪除所有相關檔案。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/task/${taskId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('任務已刪除');
+                    loadTasks();
+                } else {
+                    alert('刪除失敗：' + data.error);
+                }
+            } catch (error) {
+                alert('刪除失敗：' + error.message);
+            }
+        }
+
+        // 頁面載入時自動載入任務列表
+        window.addEventListener('DOMContentLoaded', loadTasks);
+    </script>
+</body>
+</html>
