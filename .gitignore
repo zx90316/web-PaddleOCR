@@ -2,3 +2,5 @@
 /output
 /PP-OCRv5_server_det.py
 /__pycache__
+
+ocr_tasks.db
