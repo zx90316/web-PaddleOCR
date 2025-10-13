@@ -648,3 +648,111 @@ summary:hover {
         max-width: 95%;
     }
 }
+
+/* 模式選擇器樣式 */
+.mode-selector {
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+}
+
+.mode-tabs {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.mode-tab {
+    flex: 1;
+    padding: 10px 15px;
+    background-color: var(--light-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.mode-tab:hover {
+    background-color: #e9ecef;
+    border-color: var(--primary-color);
+}
+
+.mode-tab.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* 模式內容區域 */
+.mode-content {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 範本圖片預覽 */
+.template-preview {
+    margin-top: 8px;
+    padding: 10px;
+    background-color: var(--light-bg);
+    border-radius: 4px;
+    min-height: 40px;
+}
+
+/* 閾值控制器 */
+.threshold-controls {
+    padding: 15px;
+    background-color: var(--light-bg);
+    border-radius: 8px;
+}
+
+.threshold-controls label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.threshold-controls input[type="range"] {
+    width: 100%;
+    margin-top: 5px;
+}
+
+/* 匹配結果樣式 */
+.matching-result {
+    background-color: #e7f3ff;
+    border-left: 4px solid var(--primary-color);
+}
+
+.matching-result p {
+    margin: 8px 0;
+}
+
+.matching-result details {
+    margin-top: 15px;
+}
+
+.matching-result summary {
+    cursor: pointer;
+    padding: 8px;
+    background-color: white;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.matching-result summary:hover {
+    background-color: #f0f8ff;
+}

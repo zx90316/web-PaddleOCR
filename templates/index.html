@@ -26,11 +26,21 @@ Core OCR functionality is provided by PaddleOCR.
         <!-- Left Sidebar 區域 - 輸入控制 -->
         <aside class="app-sidebar">
             <h2 class="sidebar-title">📋 操作面板</h2>
-            
+
+            <!-- 模式選擇 -->
+            <div class="form-group mode-selector">
+                <label>處理模式：</label>
+                <div class="mode-tabs">
+                    <button type="button" class="mode-tab active" data-mode="standard">標準模式</button>
+                    <button type="button" class="mode-tab" data-mode="matching">頁面匹配模式</button>
+                </div>
+            </div>
+
             <form id="uploadForm">
-                <div class="form-group">
+                <!-- 標準模式：單一檔案上傳 -->
+                <div class="form-group mode-content" id="standardMode">
                     <label for="imageFile">選擇圖片或PDF檔案：</label>
-                    <input type="file" id="imageFile" name="file" accept="image/*,.pdf" required>
+                    <input type="file" id="imageFile" name="file" accept="image/*,.pdf">
                     
                     <!-- 檔案預覽區域 -->
                     <div id="imagePreview" class="sidebar-image-preview" style="display: none;">
@@ -40,6 +50,35 @@ Core OCR functionality is provided by PaddleOCR.
                             <span class="pdf-text">PDF檔案已選擇</span>
                         </div>
                         <p id="imageFileName" class="sidebar-image-filename"></p>
+                    </div>
+                </div>
+
+                <!-- 頁面匹配模式：PDF + 範本圖片上傳 -->
+                <div class="form-group mode-content" id="matchingMode" style="display: none;">
+                    <label for="pdfFile">選擇PDF檔案：</label>
+                    <input type="file" id="pdfFile" name="pdf_file" accept=".pdf">
+                    <div id="pdfFilePreview" class="sidebar-image-preview" style="display: none;">
+                        <div class="sidebar-pdf-preview">
+                            <i class="pdf-icon">📄</i>
+                            <span class="pdf-text">PDF檔案已選擇</span>
+                        </div>
+                        <p id="pdfFileName" class="sidebar-image-filename"></p>
+                    </div>
+
+                    <label for="positiveTemplates" style="margin-top: 15px;">正例範本圖片（必填，可多選）：</label>
+                    <input type="file" id="positiveTemplates" name="positive_templates" accept="image/*" multiple>
+                    <div id="positivePreview" class="template-preview"></div>
+
+                    <label for="negativeTemplates" style="margin-top: 15px;">反例範本圖片（可選，可多選）：</label>
+                    <input type="file" id="negativeTemplates" name="negative_templates" accept="image/*" multiple>
+                    <div id="negativePreview" class="template-preview"></div>
+
+                    <div class="threshold-controls" style="margin-top: 15px;">
+                        <label for="positiveThreshold">正例相似度閾值：<span id="posThresholdValue">0.25</span></label>
+                        <input type="range" id="positiveThreshold" name="positive_threshold" min="0" max="1" step="0.05" value="0.25">
+
+                        <label for="negativeThreshold" style="margin-top: 10px;">反例相似度閾值：<span id="negThresholdValue">0.30</span></label>
+                        <input type="range" id="negativeThreshold" name="negative_threshold" min="0" max="1" step="0.05" value="0.30">
                     </div>
                 </div>
                 
