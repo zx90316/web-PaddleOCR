@@ -206,18 +206,86 @@ Copyright (c) 2025
         </div>
         {% endif %}
 
+        <!-- 頁面匹配分數 -->
+        {% if response_data and response_data.all_page_scores %}
+        <div class="info-card">
+            <h2>📊 頁面匹配分數</h2>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                    <thead>
+                        <tr style="background: #f5f5f5;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">頁碼</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">正例相似度</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">反例相似度</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">最終分數</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for score in response_data.all_page_scores %}
+                        <tr {% if score.page == response_data.matched_page_number %}style="background: #e8f5e9;"{% endif %}>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                第 {{ score.page }} 頁
+                                {% if score.page == response_data.matched_page_number %}<strong>✓ 已選取</strong>{% endif %}
+                            </td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{{ "%.4f"|format(score.positive_similarity) }}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{{ "%.4f"|format(score.negative_similarity) }}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;"><strong>{{ "%.4f"|format(score.final_score) }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- OCR 提取結果 -->
         {% if response_data and response_data.chat_result %}
         <div class="info-card">
             <h2>🔍 關鍵字提取結果</h2>
             <div class="chat-result">
-                {% for item in response_data.chat_result %}
+                {% for key, value in response_data.chat_result.items() %}
                 <div class="chat-result-item">
-                    <span class="chat-result-key">{{ item.key }}:</span>
-                    <span class="chat-result-value">{{ item.value }}</span>
+                    <span class="chat-result-key">{{ key }}:</span>
+                    <span class="chat-result-value">{{ value }}</span>
                 </div>
                 {% endfor %}
             </div>
+        </div>
+        {% endif %}
+
+        <!-- OCR 識別文字 -->
+        {% if response_data and response_data.visual_info_list %}
+        <div class="info-card">
+            <h2>📝 OCR 識別文字內容</h2>
+            {% for visual_info in response_data.visual_info_list %}
+                {% if visual_info.normal_text_dict %}
+                    {% if visual_info.normal_text_dict.get('words in image') %}
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="color: #666; font-size: 16px; margin-bottom: 10px;">🖼️ 圖片中的文字</h3>
+                        <div style="background: #f9f9f9; padding: 15px; border-radius: 6px; white-space: pre-wrap; font-family: sans-serif; line-height: 1.8;">{{ visual_info.normal_text_dict['words in image'] }}</div>
+                    </div>
+                    {% endif %}
+
+                    {% if visual_info.normal_text_dict.get('words in other_text') %}
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="color: #666; font-size: 16px; margin-bottom: 10px;">📄 其他文字內容</h3>
+                        <div style="background: #f9f9f9; padding: 15px; border-radius: 6px; white-space: pre-wrap; font-family: sans-serif; line-height: 1.8;">{{ visual_info.normal_text_dict['words in other_text'] }}</div>
+                    </div>
+                    {% endif %}
+                {% endif %}
+
+                {% if visual_info.table_text_list and visual_info.table_text_list|length > 0 %}
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #666; font-size: 16px; margin-bottom: 10px;">📊 表格內容</h3>
+                    {% for table_text in visual_info.table_text_list %}
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin-bottom: 10px;">
+                        <strong>表格 {{ loop.index }}:</strong>
+                        <pre style="margin-top: 10px; white-space: pre-wrap; font-family: sans-serif;">{{ table_text }}</pre>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endfor %}
         </div>
         {% endif %}
 
@@ -228,7 +296,7 @@ Copyright (c) 2025
             <div class="output-images">
                 {% for img_path in response_data.output_images %}
                 <div class="output-image-card">
-                    <img src="/output/{{ img_path }}" alt="輸出圖片">
+                    <img src="/output/{{ task.task_id }}/{{ img_path }}" alt="輸出圖片">
                     <div class="output-image-label">{{ img_path.split('/')[-1] }}</div>
                 </div>
                 {% endfor %}
@@ -258,7 +326,7 @@ Copyright (c) 2025
         {% if response_data %}
         <div class="info-card">
             <h2>📝 完整回應資料 (JSON)</h2>
-            <pre class="json-viewer">{{ response_data | tojson(indent=2, ensure_ascii=False) }}</pre>
+            <pre class="json-viewer">{{ response_data | tojson(indent=2) }}</pre>
         </div>
         {% endif %}
     </div>
