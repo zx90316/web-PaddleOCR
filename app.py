@@ -13,7 +13,7 @@ See: https://github.com/PaddlePaddle/PaddleOCR
 
 本項目僅為 PaddleOCR 的網頁界面封裝，核心 OCR 功能由 PaddleOCR 提供。
 """
-import torch
+
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +30,7 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 import fitz  # PyMuPDF
 import io
+import torch
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
