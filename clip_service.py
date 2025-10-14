@@ -138,11 +138,30 @@ async def match_pdf_page(
         # 讀取正例範本圖片
         positive_images = []
         for template in positive_templates:
-            if not template.content_type.startswith('image/'):
-                raise HTTPException(status_code=400, detail=f"正例範本 {template.filename} 不是有效的圖片檔案")
-            content = await template.read()
-            image = Image.open(io.BytesIO(content)).convert('RGB')
-            positive_images.append(image)
+            try:
+                # 檢查文件名
+                if not template.filename:
+                    raise HTTPException(status_code=400, detail="正例範本文件名為空")
+                
+                # 讀取文件內容
+                content = await template.read()
+                
+                # 檢查內容是否為空
+                if not content or len(content) == 0:
+                    raise HTTPException(status_code=400, detail=f"正例範本 {template.filename} 內容為空")
+                
+                # 嘗試打開圖片
+                image = Image.open(io.BytesIO(content)).convert('RGB')
+                positive_images.append(image)
+                print(f"成功載入正例範本: {template.filename}")
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"無法讀取正例範本 {template.filename}: {str(e)}。請確認上傳的是有效的圖片檔案（PNG、JPG 等格式）"
+                )
 
         if not positive_images:
             raise HTTPException(status_code=400, detail="至少需要提供一張正例範本圖片")
@@ -150,10 +169,27 @@ async def match_pdf_page(
         # 讀取反例範本圖片（可選）
         negative_images = []
         for template in negative_templates:
-            if template.content_type.startswith('image/'):
+            try:
+                # 檢查是否有實際的文件內容
+                if not template.filename:
+                    continue
+                    
                 content = await template.read()
+                
+                # 檢查內容是否為空
+                if not content or len(content) == 0:
+                    print(f"警告: 反例範本 {template.filename} 內容為空，跳過")
+                    continue
+                
+                # 嘗試打開圖片
                 image = Image.open(io.BytesIO(content)).convert('RGB')
                 negative_images.append(image)
+                print(f"成功載入反例範本: {template.filename}")
+                
+            except Exception as e:
+                # 如果某個反例範本無法載入，只記錄警告但繼續處理
+                print(f"警告: 無法載入反例範本 {template.filename}: {str(e)}，跳過此文件")
+                continue
 
         # 將 PDF 轉換為圖像
         pages = pdf_to_images(temp_pdf_path, dpi=200)
