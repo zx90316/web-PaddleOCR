@@ -156,6 +156,41 @@ The pipeline uses a local Ollama instance for LLM-based keyword extraction. Conf
 5. Performs standard OCR on matched page
 6. Returns combined results (matching + OCR)
 
+### Batch Processing System
+
+The application includes a sophisticated batch processing system for handling large volumes of PDFs:
+
+**Two-Stage Processing Pipeline:**
+1. **Stage 1 (CLIP Matching)**: Batch processes PDFs to find matching pages using CLIP service
+   - Scans directory recursively for PDF files
+   - Applies positive/negative template matching to each PDF
+   - Stores matched pages as Base64 in database
+   - Runs in background thread with pause/resume/stop controls
+
+2. **Stage 2 (OCR Extraction)**: Processes matched pages with PaddleOCR
+   - Performs OCR on matched pages from Stage 1
+   - Extracts configured keywords using LLM
+   - Stores results in structured format
+   - Supports Excel export of all extracted data
+
+**Batch Task Management Endpoints:**
+- `GET /batch-tasks` - Batch task management UI
+- `GET /batch-tasks/{task_id}/detail` - Detailed task view with progress
+- `POST /api/batch-tasks/create` - Create task and scan directory
+- `POST /api/batch-tasks/{task_id}/stage1/config` - Configure CLIP matching parameters
+- `POST /api/batch-tasks/{task_id}/stage2/config` - Configure OCR parameters and keywords
+- `POST /api/batch-tasks/{task_id}/stage1/start` - Start Stage 1 processing
+- `POST /api/batch-tasks/{task_id}/stage2/start` - Start Stage 2 processing
+- `POST /api/batch-tasks/{task_id}/pause` - Pause processing
+- `POST /api/batch-tasks/{task_id}/resume` - Resume processing
+- `POST /api/batch-tasks/{task_id}/stop` - Stop processing
+- `GET /api/batch-tasks/{task_id}/export` - Export results to Excel
+
+**Key Modules:**
+- `batch_processor.py` - Background processing engine with thread management
+- `task_database.py` - SQLite database for batch tasks (`batch_tasks.db`)
+- Batch processing uses same PaddleOCR pipeline and CLIP service as single-file processing
+
 ## Important Notes
 
 - **Dual-Service Requirement**: Both services must be running for PDF page matching to work
@@ -164,7 +199,10 @@ The pipeline uses a local Ollama instance for LLM-based keyword extraction. Conf
 - Temporary uploaded files are cleaned up after processing
 - Model paths in PP-ChatOCRv4-doc.yaml reference `./official_models/`
 - The application serves processed images via `/output` static mount
-- Task results are stored in SQLite database (`ocr_tasks.db`)
+- **Two SQLite databases** are used:
+  - `ocr_tasks.db` - Stores single OCR task history (via `database.py`)
+  - `batch_tasks.db` - Stores batch processing tasks and files (via `task_database.py`)
+- Batch processing runs in background threads with progress tracking
 
 ## Environment Variables
 
