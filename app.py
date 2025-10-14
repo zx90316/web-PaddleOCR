@@ -33,6 +33,8 @@ from datetime import datetime
 import database
 import httpx  # 用於調用 CLIP 服務
 import base64
+import task_database as batch_db
+import batch_processor
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
@@ -43,6 +45,7 @@ os.makedirs(output_dir, exist_ok=True)
 
 # 初始化資料庫
 database.init_database()
+batch_db.init_database()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/output", StaticFiles(directory=output_dir), name="output")
@@ -499,6 +502,466 @@ async def delete_task(task_id: str):
         return {"success": True, "message": "任務已刪除"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+# ==================== 批次任務管理 API ====================
+
+@app.get("/batch-tasks", response_class=HTMLResponse)
+async def batch_tasks_page(request: Request):
+    """批次任務管理頁面"""
+    return templates.TemplateResponse("batch_tasks.html", {"request": request})
+
+@app.get("/batch-tasks/{task_id}/detail", response_class=HTMLResponse)
+async def batch_task_detail_page(request: Request, task_id: str):
+    """批次任務詳情頁面"""
+    try:
+        task = batch_db.get_task_by_id(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任務不存在")
+
+        statistics = batch_db.get_task_statistics(task_id)
+        keywords = batch_db.get_task_keywords(task_id)
+
+        return templates.TemplateResponse("batch_task_detail.html", {
+            "request": request,
+            "task": task,
+            "statistics": statistics,
+            "keywords": keywords
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/batch-tasks/create")
+async def create_batch_task(
+    task_name: str = Form(...),
+    source_path: str = Form(...)
+):
+    """創建新的批次任務並掃描檔案"""
+    try:
+        # 驗證路徑
+        if not os.path.exists(source_path):
+            return {"success": False, "error": "指定的路徑不存在"}
+
+        if not os.path.isdir(source_path):
+            return {"success": False, "error": "指定的路徑不是目錄"}
+
+        # 創建任務
+        task_id = str(uuid.uuid4())
+        batch_db.create_batch_task(task_id, task_name, source_path)
+
+        # 掃描檔案
+        files = batch_processor.scan_directory(source_path)
+
+        if not files:
+            return {"success": False, "error": "未找到任何 PDF 檔案"}
+
+        # 添加檔案到任務
+        batch_db.add_files_to_task(task_id, files)
+
+        return {
+            "success": True,
+            "task_id": task_id,
+            "total_files": len(files),
+            "message": f"成功創建任務，找到 {len(files)} 個 PDF 檔案"
+        }
+
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": f"創建任務失敗: {str(e)}\n{traceback.format_exc()}"}
+
+@app.get("/api/batch-tasks")
+async def get_batch_tasks(include_deleted: bool = False):
+    """取得所有批次任務"""
+    try:
+        tasks = batch_db.get_all_tasks(include_deleted=include_deleted)
+        return {"success": True, "tasks": tasks}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}")
+async def get_batch_task_detail(task_id: str):
+    """取得批次任務詳情"""
+    try:
+        task = batch_db.get_task_by_id(task_id)
+        if not task:
+            return {"success": False, "error": "任務不存在"}
+
+        # 取得統計資訊
+        stats = batch_db.get_task_statistics(task_id)
+
+        # 取得關鍵字
+        keywords = batch_db.get_task_keywords(task_id)
+
+        return {
+            "success": True,
+            "task": task,
+            "statistics": stats,
+            "keywords": keywords
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}/files")
+async def get_batch_task_files(
+    task_id: str,
+    status: Optional[str] = None,
+    stage1_status: Optional[str] = None,
+    stage2_status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
+):
+    """取得任務的檔案列表"""
+    try:
+        files = batch_db.get_task_files(
+            task_id,
+            status=status,
+            stage1_status=stage1_status,
+            stage2_status=stage2_status,
+            limit=limit,
+            offset=offset
+        )
+        return {"success": True, "files": files}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/stage1/config")
+async def configure_stage1(
+    task_id: str,
+    positive_templates: List[UploadFile] = File(...),
+    negative_templates: List[UploadFile] = File(default=[]),
+    positive_threshold: float = Form(0.25),
+    negative_threshold: float = Form(0.30)
+):
+    """配置第一階段參數"""
+    try:
+        # 將範本圖片轉換為 Base64
+        positive_b64_list = []
+        for template in positive_templates:
+            content = await template.read()
+            b64_str = base64.b64encode(content).decode('utf-8')
+            positive_b64_list.append(b64_str)
+
+        negative_b64_list = []
+        for template in negative_templates:
+            content = await template.read()
+            b64_str = base64.b64encode(content).decode('utf-8')
+            negative_b64_list.append(b64_str)
+
+        # 保存配置
+        config = {
+            'positive_templates': positive_b64_list,
+            'negative_templates': negative_b64_list,
+            'positive_threshold': positive_threshold,
+            'negative_threshold': negative_threshold
+        }
+
+        batch_db.save_task_stage1_config(task_id, config)
+
+        return {"success": True, "message": "第一階段配置已保存"}
+
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": f"配置失敗: {str(e)}\n{traceback.format_exc()}"}
+
+@app.post("/api/batch-tasks/{task_id}/stage2/config")
+async def configure_stage2(
+    task_id: str,
+    keywords: str = Form(...),
+    use_doc_orientation_classify: bool = Form(False),
+    use_doc_unwarping: bool = Form(False),
+    use_textline_orientation: bool = Form(False),
+    use_seal_recognition: bool = Form(False),
+    use_table_recognition: bool = Form(True),
+    use_llm: bool = Form(True)
+):
+    """配置第二階段參數"""
+    try:
+        # 解析關鍵字
+        keywords_list = json.loads(keywords)
+
+        # 保存配置
+        config = {
+            'use_doc_orientation_classify': use_doc_orientation_classify,
+            'use_doc_unwarping': use_doc_unwarping,
+            'use_textline_orientation': use_textline_orientation,
+            'use_seal_recognition': use_seal_recognition,
+            'use_table_recognition': use_table_recognition,
+            'use_llm': use_llm
+        }
+
+        batch_db.save_task_stage2_config(task_id, config, keywords_list)
+
+        return {"success": True, "message": "第二階段配置已保存"}
+
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": f"配置失敗: {str(e)}\n{traceback.format_exc()}"}
+
+@app.post("/api/batch-tasks/{task_id}/stage1/start")
+async def start_stage1_processing(task_id: str):
+    """開始第一階段處理"""
+    try:
+        batch_processor.start_task_stage1(task_id, CLIP_SERVICE_URL)
+        return {"success": True, "message": "第一階段處理已啟動"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/stage2/start")
+async def start_stage2_processing(task_id: str):
+    """開始第二階段處理"""
+    try:
+        batch_processor.start_task_stage2(task_id)
+        return {"success": True, "message": "第二階段處理已啟動"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/pause")
+async def pause_task_processing(task_id: str):
+    """暫停任務"""
+    try:
+        batch_processor.pause_task(task_id)
+        return {"success": True, "message": "任務已暫停"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/resume")
+async def resume_task_processing(task_id: str):
+    """恢復任務"""
+    try:
+        batch_processor.resume_task(task_id)
+        return {"success": True, "message": "任務已恢復"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/stop")
+async def stop_task_processing(task_id: str):
+    """停止任務"""
+    try:
+        batch_processor.stop_task(task_id)
+        return {"success": True, "message": "任務已停止"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/stage1/restart")
+async def restart_stage1_processing(task_id: str):
+    """重新開始第一階段"""
+    try:
+        batch_processor.restart_task_stage1(task_id)
+        return {"success": True, "message": "第一階段已重新啟動"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/batch-tasks/{task_id}/stage2/restart")
+async def restart_stage2_processing(task_id: str):
+    """重新開始第二階段"""
+    try:
+        batch_processor.restart_task_stage2(task_id)
+        return {"success": True, "message": "第二階段已重新啟動"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.delete("/api/batch-tasks/{task_id}")
+async def delete_batch_task(task_id: str):
+    """刪除批次任務"""
+    try:
+        batch_db.mark_task_deleted(task_id)
+        return {"success": True, "message": "任務已刪除"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}/files/{file_id}")
+async def get_file_detail(task_id: str, file_id: int):
+    """取得單個檔案的詳細資訊（包含圖片）"""
+    try:
+        conn = batch_db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT * FROM batch_files
+            WHERE id = ? AND task_id = ?
+        ''', (file_id, task_id))
+
+        row = cursor.fetchone()
+        if not row:
+            return {"success": False, "error": "檔案不存在"}
+
+        file_info = dict(row)
+
+        # 解析 JSON 資料
+        if file_info['ocr_result']:
+            try:
+                file_info['ocr_result'] = json.loads(file_info['ocr_result'])
+            except:
+                pass
+
+        if file_info['extracted_keywords']:
+            try:
+                file_info['extracted_keywords'] = json.loads(file_info['extracted_keywords'])
+            except:
+                pass
+
+        return {"success": True, "file": file_info}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}/files/{file_id}/image")
+async def get_file_matched_image(task_id: str, file_id: int):
+    """取得檔案的匹配頁面圖片"""
+    try:
+        from fastapi.responses import Response
+
+        conn = batch_db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT matched_page_base64 FROM batch_files
+            WHERE id = ? AND task_id = ?
+        ''', (file_id, task_id))
+
+        row = cursor.fetchone()
+        if not row or not row['matched_page_base64']:
+            return {"success": False, "error": "圖片不存在"}
+
+        # 解碼 Base64
+        img_data = base64.b64decode(row['matched_page_base64'])
+
+        return Response(
+            content=img_data,
+            media_type="image/png",
+            headers={"Content-Disposition": f"inline; filename=page_{file_id}.png"}
+        )
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}/preview")
+async def get_task_preview(task_id: str, limit: int = 10):
+    """取得任務的預覽資訊（包含部分檔案的縮圖）"""
+    try:
+        # 取得已完成第一階段的檔案
+        files = batch_db.get_task_files(
+            task_id,
+            stage1_status='completed',
+            limit=limit
+        )
+
+        preview_data = []
+        for f in files:
+            preview_data.append({
+                'id': f['id'],
+                'file_name': f['file_name'],
+                'matched_page_number': f['matched_page_number'],
+                'matching_score': f['matching_score'],
+                'stage2_status': f['stage2_status'],
+                # Base64 圖片（可選擇性返回縮圖）
+                'has_image': bool(f['matched_page_base64'])
+            })
+
+        return {"success": True, "files": preview_data}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}/export")
+async def export_task_to_excel(task_id: str):
+    """匯出任務結果為 Excel"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill
+        from io import BytesIO
+
+        # 取得任務資訊
+        task = batch_db.get_task_by_id(task_id)
+        if not task:
+            return {"success": False, "error": "任務不存在"}
+
+        # 取得所有檔案
+        files = batch_db.get_task_files(task_id)
+
+        # 取得關鍵字
+        keywords = batch_db.get_task_keywords(task_id)
+
+        # 創建 Excel
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "OCR 結果"
+
+        # 設定標題樣式
+        title_font = Font(bold=True, size=12)
+        title_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
+        title_alignment = Alignment(horizontal="center", vertical="center")
+
+        # 寫入標題行
+        headers = ["檔案名稱", "檔案路徑", "狀態", "匹配頁面", "匹配分數"]
+        headers.extend(keywords)
+        headers.extend(["處理時間", "錯誤訊息"])
+
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.font = title_font
+            cell.fill = title_fill
+            cell.alignment = title_alignment
+
+        # 寫入數據
+        for row_idx, file_info in enumerate(files, start=2):
+            ws.cell(row=row_idx, column=1, value=file_info['file_name'])
+            ws.cell(row=row_idx, column=2, value=file_info['file_path'])
+            ws.cell(row=row_idx, column=3, value=file_info['status'])
+            ws.cell(row=row_idx, column=4, value=file_info['matched_page_number'])
+            ws.cell(row=row_idx, column=5, value=file_info['matching_score'])
+
+            # 解析提取的關鍵字
+            extracted_keywords = {}
+            if file_info['extracted_keywords']:
+                try:
+                    extracted_keywords = json.loads(file_info['extracted_keywords'])
+                except:
+                    pass
+
+            # 寫入關鍵字值
+            for kw_idx, keyword in enumerate(keywords):
+                col_idx = 6 + kw_idx
+                value = extracted_keywords.get(keyword, "")
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+            # 處理時間和錯誤訊息
+            ws.cell(row=row_idx, column=6 + len(keywords), value=file_info['processed_at'])
+            ws.cell(row=row_idx, column=7 + len(keywords), value=file_info['error_message'])
+
+        # 自動調整欄寬
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        # 保存到內存
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # 返回文件 - 使用URL編碼處理中文檔名
+        from urllib.parse import quote
+        filename = f"{task['task_name']}_{task_id[:8]}.xlsx"
+        encoded_filename = quote(filename)
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+        )
+
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": f"匯出失敗: {str(e)}\n{traceback.format_exc()}"}
 
 @app.get("/health")
 async def health_check():

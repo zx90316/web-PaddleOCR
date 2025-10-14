@@ -18,9 +18,15 @@ Core OCR functionality is provided by PaddleOCR.
     <div class="app-container">
         <!-- Header 區域 -->
         <header class="app-header">
-            <h1>🔍 PaddleOCR 圖片文檔識別服務</h1>
-            <p>智慧圖片與PDF文檔文字識別與關鍵字提取平台</p>
-            <span id="statusIndicator" class="status-indicator status-ready">準備就緒</span>
+            <div>
+                <h1>🔍 PaddleOCR 圖片文檔識別服務</h1>
+                <p>智慧圖片與PDF文檔文字識別與關鍵字提取平台</p>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <a href="/batch-tasks" class="btn-link" style="padding: 10px 20px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">📋 批次任務管理</a>
+                <a href="/admin" class="btn-link" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">🛠️ 管理後台</a>
+                <span id="statusIndicator" class="status-indicator status-ready">準備就緒</span>
+            </div>
         </header>
         
         <!-- Left Sidebar 區域 - 輸入控制 -->
