@@ -602,6 +602,15 @@ async def get_batch_task_detail(task_id: str):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.get("/api/batch-tasks/{task_id}/keywords")
+async def get_batch_task_keywords(task_id: str):
+    """取得批次任務的關鍵字"""
+    try:
+        keywords = batch_db.get_task_keywords(task_id)
+        return {"success": True, "keywords": keywords}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 @app.get("/api/batch-tasks/{task_id}/files")
 async def get_batch_task_files(
     task_id: str,
@@ -835,6 +844,43 @@ async def get_file_matched_image(task_id: str, file_id: int):
 
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.get("/api/batch-tasks/{task_id}/files/{file_id}/pdf")
+async def get_file_original_pdf(task_id: str, file_id: int):
+    """取得檔案的原始 PDF"""
+    try:
+        from fastapi.responses import FileResponse
+        import os
+
+        conn = batch_db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT file_path, file_name FROM batch_files
+            WHERE id = ? AND task_id = ?
+        ''', (file_id, task_id))
+
+        row = cursor.fetchone()
+        if not row or not row['file_path']:
+            raise HTTPException(status_code=404, detail="檔案不存在")
+
+        file_path = row['file_path']
+        file_name = row['file_name']
+
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"檔案不存在於路徑: {file_path}")
+
+        return FileResponse(
+            path=file_path,
+            media_type="application/pdf",
+            filename=file_name,
+            headers={"Content-Disposition": f"inline; filename={file_name}"}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/batch-tasks/{task_id}/preview")
 async def get_task_preview(task_id: str, limit: int = 10):

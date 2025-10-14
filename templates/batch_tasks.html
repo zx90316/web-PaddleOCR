@@ -630,6 +630,7 @@
         let tasks = [];
         let selectedTaskId = null;
         let keywords = [];
+        let isRestartMode = false; // 標記是否為重啟模式
         let refreshInterval = null;
 
         // 頁面加載時獲取任務列表
@@ -699,6 +700,9 @@
                     <div class="task-info">📄 檔案數: ${total} 個</div>
                     ${task.stage ? `<div class="task-info">🔄 當前階段: ${task.stage === 1 ? '第一階段 (CLIP 匹配)' : '第二階段 (OCR 識別)'}</div>` : ''}
                     <div class="task-info">⏱️ 建立時間: ${formatDate(task.created_at)}</div>
+                    ${((stats.stage1_failed || 0) + (stats.stage2_failed || 0)) > 0 ?
+                        `<div class="task-info" style="color: #dc2626; font-weight: 600;">⚠️ 共 ${(stats.stage1_failed || 0) + (stats.stage2_failed || 0)} 個檔案處理失敗</div>`
+                        : ''}
                     
                     <div style="margin-top: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
@@ -843,12 +847,16 @@
         }
 
         function showConfigStage1Modal() {
+            isRestartMode = false; // 預設為非重啟模式
             document.getElementById('configStage1Modal').classList.add('show');
         }
 
         function showConfigStage2Modal() {
-            keywords = [];
-            document.getElementById('keywordsList').innerHTML = '';
+            isRestartMode = false; // 預設為非重啟模式
+            if (keywords.length === 0) {
+                keywords = [];
+                document.getElementById('keywordsList').innerHTML = '';
+            }
             document.getElementById('configStage2Modal').classList.add('show');
         }
 
@@ -885,23 +893,40 @@
             const formData = new FormData(event.target);
 
             try {
-                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/stage1/config`, {
+                // 先保存配置
+                const configResponse = await fetch(`/api/batch-tasks/${selectedTaskId}/stage1/config`, {
                     method: 'POST',
                     body: formData
                 });
-                const data = await response.json();
+                const configData = await configResponse.json();
 
-                if (data.success) {
-                    alert('配置已保存');
-                    closeModal('configStage1Modal');
+                if (!configData.success) {
+                    alert('配置失敗: ' + configData.error);
+                    return;
+                }
 
+                alert('配置已保存');
+                closeModal('configStage1Modal');
+
+                // 如果是重啟模式，調用重啟 API；否則開始第一階段
+                if (isRestartMode) {
+                    const restartResponse = await fetch(`/api/batch-tasks/${selectedTaskId}/stage1/restart`, {
+                        method: 'POST'
+                    });
+                    const restartData = await restartResponse.json();
+
+                    if (restartData.success) {
+                        alert('第一階段已重新啟動');
+                        loadTasks();
+                    } else {
+                        alert('重啟失敗: ' + restartData.error);
+                    }
+                } else {
                     // 自動開始第一階段
                     startStage1();
-                } else {
-                    alert('配置失敗: ' + data.error);
                 }
             } catch (error) {
-                alert('配置失敗: ' + error);
+                alert('操作失敗: ' + error);
             }
         }
 
@@ -917,23 +942,40 @@
             formData.set('keywords', JSON.stringify(keywords));
 
             try {
-                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/stage2/config`, {
+                // 先保存配置
+                const configResponse = await fetch(`/api/batch-tasks/${selectedTaskId}/stage2/config`, {
                     method: 'POST',
                     body: formData
                 });
-                const data = await response.json();
+                const configData = await configResponse.json();
 
-                if (data.success) {
-                    alert('配置已保存');
-                    closeModal('configStage2Modal');
+                if (!configData.success) {
+                    alert('配置失敗: ' + configData.error);
+                    return;
+                }
 
+                alert('配置已保存');
+                closeModal('configStage2Modal');
+
+                // 如果是重啟模式，調用重啟 API；否則開始第二階段
+                if (isRestartMode) {
+                    const restartResponse = await fetch(`/api/batch-tasks/${selectedTaskId}/stage2/restart`, {
+                        method: 'POST'
+                    });
+                    const restartData = await restartResponse.json();
+
+                    if (restartData.success) {
+                        alert('第二階段已重新啟動');
+                        loadTasks();
+                    } else {
+                        alert('重啟失敗: ' + restartData.error);
+                    }
+                } else {
                     // 自動開始第二階段
                     startStage2();
-                } else {
-                    alert('配置失敗: ' + data.error);
                 }
             } catch (error) {
-                alert('配置失敗: ' + error);
+                alert('操作失敗: ' + error);
             }
         }
 
@@ -995,28 +1037,79 @@
         }
 
         async function restartStage1() {
-            if (!confirm('確定要重新開始第一階段嗎？這將清除所有第一階段的結果。')) return;
+            if (!confirm('確定要重新開始第一階段嗎？這將清除所有第一階段的結果。\n\n請在下一個對話框中調整配置參數。')) return;
 
+            // 設置為重啟模式
+            isRestartMode = true;
+
+            // 載入當前配置並顯示配置模態框
+            await loadStage1ConfigForRestart();
+            document.getElementById('configStage1Modal').classList.add('show');
+        }
+
+        async function loadStage1ConfigForRestart() {
             try {
-                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/stage1/restart`, { method: 'POST' });
+                const response = await fetch(`/api/batch-tasks/${selectedTaskId}`);
                 const data = await response.json();
-                alert(data.success ? '第一階段已重新啟動' : '重啟失敗: ' + data.error);
-                loadTasks();
+
+                if (data.success && data.task.stage1_config) {
+                    const config = JSON.parse(data.task.stage1_config);
+
+                    // 填充表單
+                    document.getElementById('positiveThreshold').value = config.positive_threshold || 0.95;
+                    document.getElementById('negativeThreshold').value = config.negative_threshold || 0.55;
+
+                    // 更新滑桿顯示
+                    document.getElementById('posThresholdValue').textContent = config.positive_threshold || 0.95;
+                    document.getElementById('negThresholdValue').textContent = config.negative_threshold || 0.55;
+
+                    console.log('已載入第一階段配置:', config);
+                }
             } catch (error) {
-                alert('重啟失敗: ' + error);
+                console.error('載入配置失敗:', error);
             }
         }
 
         async function restartStage2() {
-            if (!confirm('確定要重新開始第二階段嗎？這將清除所有第二階段的結果。')) return;
+            if (!confirm('確定要重新開始第二階段嗎？這將清除所有第二階段的結果。\n\n請在下一個對話框中調整配置參數。')) return;
 
+            // 設置為重啟模式
+            isRestartMode = true;
+
+            // 載入當前配置並顯示配置模態框
+            await loadStage2ConfigForRestart();
+            document.getElementById('configStage2Modal').classList.add('show');
+        }
+
+        async function loadStage2ConfigForRestart() {
             try {
-                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/stage2/restart`, { method: 'POST' });
+                const response = await fetch(`/api/batch-tasks/${selectedTaskId}`);
                 const data = await response.json();
-                alert(data.success ? '第二階段已重新啟動' : '重啟失敗: ' + data.error);
-                loadTasks();
+
+                if (data.success && data.task.stage2_config) {
+                    const config = JSON.parse(data.task.stage2_config);
+
+                    // 填充表單
+                    document.getElementById('useLLM').checked = config.use_llm !== false;
+                    document.getElementById('useOrientation').checked = config.use_doc_orientation_classify || false;
+                    document.getElementById('useUnwarping').checked = config.use_doc_unwarping || false;
+                    document.getElementById('useTextlineOrientation').checked = config.use_textline_orientation || false;
+                    document.getElementById('useSealRecognition').checked = config.use_seal_recognition || false;
+                    document.getElementById('useTableRecognition').checked = config.use_table_recognition !== false;
+
+                    console.log('已載入第二階段配置:', config);
+                }
+
+                // 載入關鍵字
+                const keywordsResponse = await fetch(`/api/batch-tasks/${selectedTaskId}/keywords`);
+                const keywordsData = await keywordsResponse.json();
+
+                if (keywordsData.success && keywordsData.keywords) {
+                    keywords = keywordsData.keywords;
+                    renderKeywords();
+                }
             } catch (error) {
-                alert('重啟失敗: ' + error);
+                console.error('載入配置失敗:', error);
             }
         }
 

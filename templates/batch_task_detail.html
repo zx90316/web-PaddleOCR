@@ -654,6 +654,7 @@
                 <button class="tab-button active" onclick="switchTab('preview')">圖片預覽</button>
                 <button class="tab-button" onclick="switchTab('files')">檔案列表</button>
                 <button class="tab-button" onclick="switchTab('results')">OCR 結果</button>
+                <button class="tab-button" onclick="switchTab('errors')">❌ 錯誤 (<span id="errorCount">0</span>)</button>
             </div>
 
             <div id="previewTab" class="tab-content active">
@@ -671,6 +672,11 @@
             <div id="resultsTab" class="tab-content">
                 <h2>OCR 結果</h2>
                 <div id="resultsList"></div>
+            </div>
+
+            <div id="errorsTab" class="tab-content">
+                <h2>處理失敗的檔案</h2>
+                <div id="errorsList"></div>
             </div>
         </div>
     </div>
@@ -696,6 +702,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             setupImageObserver();
             loadAllFiles();
+            updateErrorCount();
         });
 
         function setupImageObserver() {
@@ -871,6 +878,10 @@
                         <p><strong>第一階段狀態:</strong> ${file.stage1_status}</p>
                         <p><strong>第二階段狀態:</strong> ${file.stage2_status}</p>
                         ${keywords ? `<hr style="margin: 10px 0;"><h4>提取的關鍵字:</h4>${keywords}` : ''}
+                        <hr style="margin: 10px 0;">
+                        <div style="margin-top: 15px;">
+                            <a href="/api/batch-tasks/${taskId}/files/${fileId}/pdf" target="_blank" class="btn btn-primary" style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">📄 開啟原始 PDF 檔案</a>
+                        </div>
                     `;
 
                     modal.classList.add('show');
@@ -899,6 +910,8 @@
                 loadFilesList();
             } else if (tabName === 'results' && document.getElementById('resultsList').innerHTML === '') {
                 loadResults();
+            } else if (tabName === 'errors' && document.getElementById('errorsList').innerHTML === '') {
+                loadErrors();
             }
         }
 
@@ -953,10 +966,11 @@
                             <span>第二階段: ${f.stage2_status}</span>
                         </div>
                     </div>
-                    <div>
+                    <div style="display: flex; gap: 5px;">
                         ${f.stage1_status === 'completed' ?
-                            `<button class="btn btn-sm btn-primary" onclick="showImage(${f.id})">查看圖片</button>`
+                            `<button class="btn btn-sm btn-primary" onclick="showImage(${f.id})">查看匹配頁</button>`
                             : '-'}
+                            <a href="/api/batch-tasks/${taskId}/files/${f.id}/pdf" target="_blank" class="btn btn-sm btn-secondary" style="text-decoration: none;">開啟 PDF</a>
                     </div>
                 </div>
             `).join('');
@@ -1034,7 +1048,10 @@
                                 `<p><strong>${key}:</strong> ${value || '(未找到)'}</p>`
                             ).join('')
                             : '<p style="color: #6b7280;">無關鍵字資料</p>'}
-                        <button class="btn btn-sm btn-primary" onclick="showImage(${f.id})" style="margin-top: 10px;">查看原圖</button>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <button class="btn btn-sm btn-primary" onclick="showImage(${f.id})">查看匹配頁</button>
+                            <a href="/api/batch-tasks/${taskId}/files/${f.id}/pdf" target="_blank" class="btn btn-sm" style="background: #6b7280; color: white; text-decoration: none; padding: 6px 12px; border-radius: 8px; font-weight: 600;">📄 開啟原始 PDF</a>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1053,12 +1070,125 @@
             }
         }
 
+        async function updateErrorCount() {
+            try {
+                const response = await fetch(`/api/batch-tasks/${taskId}/files?limit=10000`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const failedCount = data.files.filter(f =>
+                        f.stage1_status === 'failed' || f.stage2_status === 'failed'
+                    ).length;
+                    document.getElementById('errorCount').textContent = failedCount;
+                }
+            } catch (error) {
+                console.error('更新錯誤計數失敗:', error);
+            }
+        }
+
+        async function loadErrors() {
+            try {
+                const response = await fetch(`/api/batch-tasks/${taskId}/files?limit=10000`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const list = document.getElementById('errorsList');
+
+                    // 過濾出失敗的檔案
+                    const failedFiles = data.files.filter(f =>
+                        f.stage1_status === 'failed' || f.stage2_status === 'failed'
+                    );
+
+                    if (failedFiles.length === 0) {
+                        list.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 40px;">🎉 沒有錯誤！所有檔案處理正常</p>';
+                        return;
+                    }
+
+                    const folderTree = buildFolderTree(failedFiles);
+                    const sortedFolders = Object.keys(folderTree).sort();
+
+                    list.innerHTML = sortedFolders.map(folderPath => {
+                        const folderFiles = folderTree[folderPath];
+                        const folderId = 'errors_folder_' + btoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
+
+                        return `
+                            <div class="result-tree-folder">
+                                <div class="result-folder-header" onclick="toggleErrorsFolder('${folderId}')">
+                                    <span class="file-folder-toggle" id="${folderId}_toggle">▶</span>
+                                    <span class="file-folder-path">📁 ${folderPath}</span>
+                                    <span class="file-folder-count">(${folderFiles.length} 個錯誤)</span>
+                                </div>
+                                <div class="result-folder-content" id="${folderId}">
+                                    ${renderErrorItems(folderFiles)}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('載入錯誤列表失敗:', error);
+            }
+        }
+
+        function renderErrorItems(files) {
+            return files.map(f => {
+                const stage1Failed = f.stage1_status === 'failed';
+                const stage2Failed = f.stage2_status === 'failed';
+
+                return `
+                    <div class="result-item" style="border-left: 4px solid #dc2626;">
+                        <h4 style="color: #dc2626;">❌ ${f.file_name}</h4>
+                        <p><strong>檔案路徑:</strong> ${f.file_path}</p>
+
+                        ${stage1Failed ? `
+                            <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                                <h5 style="color: #991b1b; margin-bottom: 8px;">🔴 第一階段失敗 (CLIP 圖像匹配)</h5>
+                                <p style="color: #7f1d1d; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-word;">
+                                    ${f.error_message || '未知錯誤'}
+                                </p>
+                            </div>
+                        ` : ''}
+
+                        ${stage2Failed ? `
+                            <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                                <h5 style="color: #92400e; margin-bottom: 8px;">🟡 第二階段失敗 (OCR 識別)</h5>
+                                <p style="color: #78350f; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-word;">
+                                    ${f.error_message || '未知錯誤'}
+                                </p>
+                            </div>
+                        ` : ''}
+
+                        <div style="margin-top: 10px; font-size: 13px; color: #6b7280;">
+                            <p><strong>第一階段狀態:</strong> <span style="color: ${f.stage1_status === 'failed' ? '#dc2626' : '#10b981'};">${f.stage1_status}</span></p>
+                            <p><strong>第二階段狀態:</strong> <span style="color: ${f.stage2_status === 'failed' ? '#dc2626' : '#6b7280'};">${f.stage2_status}</span></p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleErrorsFolder(folderId) {
+            const content = document.getElementById(folderId);
+            const toggle = document.getElementById(folderId + '_toggle');
+
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+            } else {
+                content.classList.add('expanded');
+                toggle.classList.add('expanded');
+            }
+        }
+
         // 點擊模態框背景關閉
         document.getElementById('imageModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeImageModal();
             }
         });
+
+        // 定期更新錯誤計數（如果任務正在處理中）
+        setInterval(updateErrorCount, 5000);
     </script>
 </body>
 </html>
