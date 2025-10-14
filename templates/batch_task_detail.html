@@ -545,6 +545,21 @@
             color: white;
             border-color: #667eea;
         }
+
+        .progress-detail {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e5e7eb;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -577,6 +592,59 @@
                 <div class="stat-card">
                     <div class="stat-value">{{"{:.2f}".format(statistics.avg_matching_score or 0)}}</div>
                     <div class="stat-label">平均匹配分數</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <h3 style="margin-bottom: 15px;">📊 第一階段進度 - CLIP 圖像匹配</h3>
+                <div class="progress-detail">
+                    {% set total = statistics.total_files or 0 %}
+                    {% set stage1_progress = ((statistics.stage1_completed or 0) + (statistics.stage1_failed or 0)) / total * 100 if total > 0 else 0 %}
+                    <div class="progress-bar" style="height: 24px; margin-bottom: 10px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+                        <div style="width: {{stage1_progress}}%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 12px;">
+                            {{ "{:.1f}".format(stage1_progress) }}%
+                        </div>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                            <div class="stat-value" style="color: #92400e;">{{statistics.stage1_pending or 0}}</div>
+                            <div class="stat-label">⏳ 待處理</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);">
+                            <div class="stat-value" style="color: #065f46;">{{statistics.stage1_completed or 0}}</div>
+                            <div class="stat-label">✅ 已完成</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);">
+                            <div class="stat-value" style="color: #991b1b;">{{statistics.stage1_failed or 0}}</div>
+                            <div class="stat-label">❌ 失敗</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <h3 style="margin-bottom: 15px;">📝 第二階段進度 - OCR 識別</h3>
+                <div class="progress-detail">
+                    {% set stage2_progress = ((statistics.stage2_completed or 0) + (statistics.stage2_failed or 0)) / total * 100 if total > 0 else 0 %}
+                    <div class="progress-bar" style="height: 24px; margin-bottom: 10px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+                        <div style="width: {{stage2_progress}}%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 12px;">
+                            {{ "{:.1f}".format(stage2_progress) }}%
+                        </div>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                            <div class="stat-value" style="color: #92400e;">{{statistics.stage2_pending or 0}}</div>
+                            <div class="stat-label">⏳ 待處理</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);">
+                            <div class="stat-value" style="color: #065f46;">{{statistics.stage2_completed or 0}}</div>
+                            <div class="stat-label">✅ 已完成</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);">
+                            <div class="stat-value" style="color: #991b1b;">{{statistics.stage2_failed or 0}}</div>
+                            <div class="stat-label">❌ 失敗</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

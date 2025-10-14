@@ -108,6 +108,9 @@
             cursor: pointer;
             transition: all 0.3s;
             border: 2px solid transparent;
+            min-height: 320px;
+            display: flex;
+            flex-direction: column;
         }
 
         .task-card:hover {
@@ -502,6 +505,18 @@
             color: white;
             border-color: #667eea;
         }
+
+        .progress-detail {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e5e7eb;
+        }
+
+        .progress-detail h4 {
+            margin-bottom: 10px;
+            color: #374151;
+        }
     </style>
 </head>
 <body>
@@ -634,6 +649,20 @@
 
                 if (data.success) {
                     tasks = data.tasks;
+                    
+                    // 為每個任務加載統計資訊
+                    await Promise.all(tasks.map(async (task) => {
+                        try {
+                            const statsResponse = await fetch(`/api/batch-tasks/${task.task_id}`);
+                            const statsData = await statsResponse.json();
+                            if (statsData.success) {
+                                task.statistics = statsData.statistics;
+                            }
+                        } catch (error) {
+                            console.error(`載入任務 ${task.task_id} 統計資訊失敗:`, error);
+                        }
+                    }));
+                    
                     renderTasks();
 
                     // 如果有選中的任務，刷新詳情
@@ -654,22 +683,55 @@
                 return;
             }
 
-            grid.innerHTML = tasks.map(task => `
+            grid.innerHTML = tasks.map(task => {
+                const stats = task.statistics || {};
+                const total = stats.total_files || task.total_files || 0;
+                const stage1Progress = total > 0 ? ((stats.stage1_completed || 0) + (stats.stage1_failed || 0)) / total * 100 : 0;
+                const stage2Progress = total > 0 ? ((stats.stage2_completed || 0) + (stats.stage2_failed || 0)) / total * 100 : 0;
+                
+                return `
                 <div class="task-card ${task.task_id === selectedTaskId ? 'active' : ''}" onclick="selectTask('${task.task_id}')">
                     <div class="task-header">
                         <div class="task-name">${task.task_name}</div>
                         <span class="task-status status-${task.status}">${getStatusText(task.status)}</span>
                     </div>
                     <div class="task-info">📁 路徑: ${task.source_path}</div>
-                    <div class="task-info">📄 檔案數: ${task.total_files} 個</div>
-                    <div class="task-info">✅ 已處理: ${task.processed_files} 個</div>
+                    <div class="task-info">📄 檔案數: ${total} 個</div>
+                    ${task.stage ? `<div class="task-info">🔄 當前階段: ${task.stage === 1 ? '第一階段 (CLIP 匹配)' : '第二階段 (OCR 識別)'}</div>` : ''}
                     <div class="task-info">⏱️ 建立時間: ${formatDate(task.created_at)}</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
+                    
+                    <div style="margin-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <small style="color: #374151; font-weight: 600;">📊 第一階段</small>
+                            <small style="color: #6b7280;">${stage1Progress.toFixed(1)}%</small>
+                        </div>
+                        <div class="progress-bar" style="height: 6px;">
+                            <div class="progress-fill" style="width: ${stage1Progress}%"></div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 3px; font-size: 11px; color: #6b7280;">
+                            <span>⏳ ${stats.stage1_pending || 0}</span>
+                            <span style="color: #10b981;">✅ ${stats.stage1_completed || 0}</span>
+                            <span style="color: #ef4444;">❌ ${stats.stage1_failed || 0}</span>
+                        </div>
                     </div>
-                    <small style="color: #6b7280; margin-top: 5px; display: block;">進度: ${(task.progress || 0).toFixed(1)}%</small>
+                    
+                    <div style="margin-top: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <small style="color: #374151; font-weight: 600;">📝 第二階段</small>
+                            <small style="color: #6b7280;">${stage2Progress.toFixed(1)}%</small>
+                        </div>
+                        <div class="progress-bar" style="height: 6px;">
+                            <div class="progress-fill" style="width: ${stage2Progress}%"></div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 3px; font-size: 11px; color: #6b7280;">
+                            <span>⏳ ${stats.stage2_pending || 0}</span>
+                            <span style="color: #10b981;">✅ ${stats.stage2_completed || 0}</span>
+                            <span style="color: #ef4444;">❌ ${stats.stage2_failed || 0}</span>
+                        </div>
+                    </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         function selectTask(taskId) {
@@ -1041,6 +1103,22 @@
             if (!dateString) return '-';
             const date = new Date(dateString);
             return date.toLocaleString('zh-TW');
+        }
+
+        function getStage1Progress(stats) {
+            const total = stats.total_files || 0;
+            if (total === 0) return 0;
+            const completed = stats.stage1_completed || 0;
+            const failed = stats.stage1_failed || 0;
+            return ((completed + failed) / total) * 100;
+        }
+
+        function getStage2Progress(stats) {
+            const total = stats.total_files || 0;
+            if (total === 0) return 0;
+            const completed = stats.stage2_completed || 0;
+            const failed = stats.stage2_failed || 0;
+            return ((completed + failed) / total) * 100;
         }
 
         // 點擊 modal 外部關閉
