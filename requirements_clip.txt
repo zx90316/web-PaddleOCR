@@ -1,0 +1,20 @@
+# CLIP 圖像匹配服務依賴
+# 此環境使用 PyTorch，與 PaddlePaddle 分離以避免 cuDNN 衝突
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+fastapi
+uvicorn
+python-multipart
+
+# PyTorch 和相關套件
+torch>=2.0.0
+transformers>=4.30.0
+pillow>=10.0.0
+
+# PDF 處理
+PyMuPDF>=1.23.0
+
+# 基礎套件
+numpy>=1.24.0
+typing-extensions>=4.9.0

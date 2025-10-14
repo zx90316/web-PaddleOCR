@@ -1,0 +1,23 @@
+# PaddleOCR 主服務依賴
+# 此環境使用 PaddlePaddle，與 PyTorch 分離以避免 cuDNN 衝突
+
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+
+# PaddlePaddle 和相關套件
+paddlepaddle-gpu
+paddlex[ie]
+paddlex[ocr]
+
+# FastAPI 和 Web 框架
+fastapi
+uvicorn
+jinja2
+python-multipart
+
+# HTTP 客戶端（用於調用 CLIP 服務）
+httpx
+
+# 基礎套件
+pillow>=10.0.0
+numpy>=1.24.0
+typing-extensions>=4.9.0

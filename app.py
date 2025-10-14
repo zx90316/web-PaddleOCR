@@ -27,13 +27,12 @@ from paddlex import create_pipeline
 import shutil
 import numpy as np
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
-import fitz  # PyMuPDF
 import io
-import torch
 import uuid
 from datetime import datetime
 import database
+import httpx  # 用於調用 CLIP 服務
+import base64
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
@@ -57,19 +56,8 @@ pipeline = create_pipeline(
     initial_predictor=False
     )
 
-# 初始化 CLIP 模型（延遲載入）
-clip_model = None
-clip_processor = None
-
-def get_clip_model():
-    """延遲載入 CLIP 模型"""
-    global clip_model, clip_processor
-    if clip_model is None:
-        print("載入 CLIP 模型...")
-        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        print("CLIP 模型載入完成")
-    return clip_model, clip_processor
+# CLIP 服務配置
+CLIP_SERVICE_URL = os.getenv("CLIP_SERVICE_URL", "http://localhost:8081")
 
 # 請求模型
 class OCRRequest(BaseModel):
@@ -83,116 +71,71 @@ class OCRResponse(BaseModel):
     data: Optional[dict] = None
     error: Optional[str] = None
 
-def compute_image_similarity(image, template_images, model, processor):
+async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadFile], negative_templates: List[UploadFile], positive_threshold: float, negative_threshold: float):
     """
-    計算圖像與範本圖像的相似度
+    調用 CLIP 服務進行頁面匹配
     Args:
-        image: PIL Image 對象
-        template_images: 範本圖像列表 (PIL Image 對象)
-        model: CLIP 模型
-        processor: CLIP 處理器
-    Returns:
-        平均相似度分數
-    """
-    # 處理圖像
-    inputs = processor(images=[image] + template_images, return_tensors="pt", padding=True)
-
-    with torch.no_grad():
-        image_features = model.get_image_features(**inputs)
-
-    # 正規化特徵向量
-    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-
-    # 計算查詢圖像與所有範本的相似度
-    query_features = image_features[0:1]
-    template_features = image_features[1:]
-
-    similarities = torch.matmul(query_features, template_features.T).squeeze()
-
-    # 如果只有一個範本，確保返回標量
-    if len(template_images) == 1:
-        return similarities.item()
-
-    # 返回平均相似度
-    return similarities.mean().item()
-
-def pdf_to_images(pdf_path, dpi=200):
-    """
-    使用 PyMuPDF 將 PDF 轉換為圖像列表
-    Args:
-        pdf_path: PDF 文件路徑
-        dpi: 圖像解析度
-    Returns:
-        PIL Image 對象列表
-    """
-    pdf_document = fitz.open(pdf_path)
-    images = []
-
-    # 計算縮放因子（DPI / 72，因為 PDF 默認是 72 DPI）
-    zoom = dpi / 72
-    mat = fitz.Matrix(zoom, zoom)
-
-    for page_num in range(len(pdf_document)):
-        page = pdf_document[page_num]
-        pix = page.get_pixmap(matrix=mat)
-
-        # 轉換為 PIL Image
-        img_data = pix.tobytes("png")
-        img = Image.open(io.BytesIO(img_data))
-        images.append(img)
-
-    pdf_document.close()
-    return images
-
-def find_best_matching_page(pdf_path, positive_images, negative_images, model, processor, positive_threshold=0.25, negative_threshold=0.30):
-    """
-    從 PDF 中找出最匹配的頁面
-    Args:
-        pdf_path: PDF 文件路徑
-        positive_images: 正例範本圖像列表 (PIL Image 對象)
-        negative_images: 反例範本圖像列表 (PIL Image 對象)
-        model: CLIP 模型
-        processor: CLIP 處理器
+        pdf_file_path: PDF 文件路徑
+        positive_templates: 正例範本圖片列表
+        negative_templates: 反例範本圖片列表
         positive_threshold: 正例相似度閾值
         negative_threshold: 反例相似度閾值
     Returns:
-        (best_page_index, best_page_image, best_score, all_scores)
+        (matched_page_number, matched_page_image, matching_score, all_scores)
     """
-    # 將 PDF 轉換為圖像
-    pages = pdf_to_images(pdf_path, dpi=200)
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        # 準備文件
+        files = []
 
-    best_page_index = -1
-    best_score = -1
-    best_page_image = None
-    all_scores = []
+        # PDF 文件
+        with open(pdf_file_path, 'rb') as f:
+            files.append(('pdf_file', (os.path.basename(pdf_file_path), f.read(), 'application/pdf')))
 
-    for idx, page_image in enumerate(pages):
-        # 計算與正例的相似度
-        pos_similarity = compute_image_similarity(page_image, positive_images, model, processor)
+        # 正例範本
+        for template in positive_templates:
+            await template.seek(0)  # 重置文件指針
+            content = await template.read()
+            files.append(('positive_templates', (template.filename, content, template.content_type)))
 
-        # 計算與反例的相似度（如果有提供）
-        neg_similarity = 0
-        if negative_images:
-            neg_similarity = compute_image_similarity(page_image, negative_images, model, processor)
+        # 反例範本
+        for template in negative_templates:
+            await template.seek(0)
+            content = await template.read()
+            files.append(('negative_templates', (template.filename, content, template.content_type)))
 
-        # 計算綜合分數：正例相似度 - 反例相似度
-        score = pos_similarity - neg_similarity
+        # 準備表單數據
+        data = {
+            'positive_threshold': positive_threshold,
+            'negative_threshold': negative_threshold
+        }
 
-        all_scores.append({
-            "page": idx + 1,
-            "positive_similarity": float(pos_similarity),
-            "negative_similarity": float(neg_similarity),
-            "final_score": float(score)
-        })
+        # 調用 CLIP 服務
+        response = await client.post(
+            f"{CLIP_SERVICE_URL}/match-page",
+            files=files,
+            data=data
+        )
 
-        # 檢查是否符合條件：正例相似度高於閾值，反例相似度低於閾值
-        if pos_similarity >= positive_threshold and neg_similarity <= negative_threshold:
-            if score > best_score:
-                best_score = score
-                best_page_index = idx
-                best_page_image = page_image
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"CLIP 服務調用失敗: {response.text}")
 
-    return best_page_index, best_page_image, best_score, all_scores
+        result = response.json()
+
+        if not result.get('success'):
+            raise HTTPException(status_code=400, detail=result.get('error', '未知錯誤'))
+
+        # 解碼 Base64 圖像
+        matched_page_image = None
+        if result.get('matched_page_base64'):
+            img_data = base64.b64decode(result['matched_page_base64'])
+            matched_page_image = Image.open(io.BytesIO(img_data))
+
+        return (
+            result.get('matched_page_number'),
+            matched_page_image,
+            result.get('matching_score'),
+            result.get('all_page_scores', [])
+        )
 
 def perform_ocr_on_file(
     file_path: str,
@@ -378,12 +321,10 @@ async def process_ocr_with_matching(
     """
     處理 PDF 頁面匹配和 OCR 請求
     1. 接受 PDF 文件、正例範本圖片、反例範本圖片
-    2. 使用 CLIP 找出最相似的頁面
+    2. 調用 CLIP 服務找出最相似的頁面
     3. 對該頁面執行 OCR 處理
     """
     temp_pdf_path = None
-    temp_positive_paths = []
-    temp_negative_paths = []
     task_id = str(uuid.uuid4())
     task_output_dir = os.path.join(output_dir, task_id)
 
@@ -401,48 +342,23 @@ async def process_ocr_with_matching(
         # 創建任務專屬輸出目錄
         os.makedirs(task_output_dir, exist_ok=True)
 
-        # 載入 CLIP 模型
-        model, processor = get_clip_model()
-
         # 保存 PDF 到臨時檔案
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
             content = await pdf_file.read()
             temp_pdf.write(content)
             temp_pdf_path = temp_pdf.name
 
-        # 讀取正例範本圖片
-        positive_images = []
-        for template in positive_templates:
-            if not template.content_type.startswith('image/'):
-                raise HTTPException(status_code=400, detail=f"正例範本 {template.filename} 不是有效的圖片檔案")
-            content = await template.read()
-            image = Image.open(io.BytesIO(content)).convert('RGB')
-            positive_images.append(image)
-
-        if not positive_images:
-            raise HTTPException(status_code=400, detail="至少需要提供一張正例範本圖片")
-
-        # 讀取反例範本圖片（可選）
-        negative_images = []
-        for template in negative_templates:
-            if template.content_type.startswith('image/'):
-                content = await template.read()
-                image = Image.open(io.BytesIO(content)).convert('RGB')
-                negative_images.append(image)
-
-        # 找出最匹配的頁面
-        print(f"開始分析 PDF，正例範本數量: {len(positive_images)}, 反例範本數量: {len(negative_images)}")
-        best_page_index, best_page_image, best_score, all_scores = find_best_matching_page(
+        # 調用 CLIP 服務進行頁面匹配
+        print(f"調用 CLIP 服務進行頁面匹配...")
+        best_page_number, best_page_image, best_score, all_scores = await call_clip_service(
             temp_pdf_path,
-            positive_images,
-            negative_images,
-            model,
-            processor,
+            positive_templates,
+            negative_templates,
             positive_threshold,
             negative_threshold
         )
 
-        if best_page_index == -1:
+        if best_page_number is None:
             # 清理輸出目錄
             if os.path.exists(task_output_dir):
                 shutil.rmtree(task_output_dir)
@@ -451,10 +367,10 @@ async def process_ocr_with_matching(
                 error=f"未找到符合條件的頁面。請調整閾值參數。所有頁面分數: {all_scores}"
             )
 
-        print(f"找到最佳匹配頁面: 第 {best_page_index + 1} 頁, 分數: {best_score:.4f}")
+        print(f"找到最佳匹配頁面: 第 {best_page_number} 頁, 分數: {best_score:.4f}")
 
         # 將匹配的頁面保存到任務輸出目錄
-        matched_page_filename = f"matched_page_{best_page_index + 1}.png"
+        matched_page_filename = f"matched_page_{best_page_number}.png"
         matched_page_path = os.path.join(task_output_dir, matched_page_filename)
         best_page_image.save(matched_page_path, 'PNG')
 
@@ -475,7 +391,7 @@ async def process_ocr_with_matching(
         # 在 OCR 結果中添加頁面匹配資訊
         response_data = {
             **ocr_response_data,  # 包含所有 OCR 結果
-            "matched_page_number": best_page_index + 1,
+            "matched_page_number": best_page_number,
             "matching_score": float(best_score),
             "all_page_scores": all_scores,
             "matched_page_path": f"{task_id}/{matched_page_filename}",
@@ -503,7 +419,7 @@ async def process_ocr_with_matching(
             output_directory=task_output_dir,
             response_file=response_file,
             file_type='pdf',
-            matched_page_number=best_page_index + 1,
+            matched_page_number=best_page_number,
             settings=response_data["settings"]
         )
 
@@ -521,13 +437,12 @@ async def process_ocr_with_matching(
         return OCRResponse(success=False, error=error_detail)
 
     finally:
-        # 清理臨時檔案 (不包括 matched_page，因為已保存到任務目錄)
-        for path in [temp_pdf_path] + temp_positive_paths + temp_negative_paths:
-            if path and os.path.exists(path):
-                try:
-                    os.unlink(path)
-                except Exception as e:
-                    print(f"清理臨時檔案失敗: {path}, 錯誤: {e}")
+        # 清理臨時檔案
+        if temp_pdf_path and os.path.exists(temp_pdf_path):
+            try:
+                os.unlink(temp_pdf_path)
+            except Exception as e:
+                print(f"清理臨時檔案失敗: {temp_pdf_path}, 錯誤: {e}")
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
