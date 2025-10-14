@@ -96,8 +96,8 @@ def pdf_to_images(pdf_path, dpi=200):
 
 class PageMatchRequest(BaseModel):
     """頁面匹配請求模型"""
-    positive_threshold: float = 0.25
-    negative_threshold: float = 0.30
+    positive_threshold: float = 0.95
+    negative_threshold: float = 0.55
 
 class PageMatchResponse(BaseModel):
     """頁面匹配響應模型"""
@@ -113,8 +113,8 @@ async def match_pdf_page(
     pdf_file: UploadFile = File(...),
     positive_templates: List[UploadFile] = File(...),
     negative_templates: List[UploadFile] = File(default=[]),
-    positive_threshold: float = Form(0.25),
-    negative_threshold: float = Form(0.30),
+    positive_threshold: float = Form(0.95),
+    negative_threshold: float = Form(0.55),
 ):
     """
     找出 PDF 中最匹配的頁面
@@ -194,10 +194,8 @@ async def match_pdf_page(
         # 將 PDF 轉換為圖像
         pages = pdf_to_images(temp_pdf_path, dpi=200)
 
-        best_page_index = -1
-        best_score = -1
-        best_page_image = None
         all_scores = []
+        candidates = []  # 候選頁面列表
 
         # 找出最匹配的頁面
         print(f"開始分析 PDF，正例範本數量: {len(positive_images)}, 反例範本數量: {len(negative_images)}")
@@ -211,31 +209,56 @@ async def match_pdf_page(
             if negative_images:
                 neg_similarity = compute_image_similarity(page_image, negative_images, model, processor)
 
-            # 計算綜合分數：正例相似度 - 反例相似度
-            score = pos_similarity - neg_similarity
-
             all_scores.append({
                 "page": idx + 1,
                 "positive_similarity": float(pos_similarity),
                 "negative_similarity": float(neg_similarity),
-                "final_score": float(score)
             })
 
-            # 檢查是否符合條件：正例相似度高於閾值，反例相似度低於閾值
+            # 檢查是否符合條件：正例相似度高於閾值，且反例相似度低於閾值
             if pos_similarity >= positive_threshold and neg_similarity <= negative_threshold:
-                if score > best_score:
-                    best_score = score
-                    best_page_index = idx
-                    best_page_image = page_image
+                candidates.append({
+                    "page_index": idx,
+                    "page_image": page_image,
+                    "positive_similarity": pos_similarity,
+                    "negative_similarity": neg_similarity
+                })
 
-        if best_page_index == -1:
+        if not candidates:
+            # 找出最高的正例分數
+            max_pos = max((s["positive_similarity"] for s in all_scores), default=0)
+
+            # 找出達到正例閾值的頁面，並顯示它們的反例分數
+            qualified_pos_pages = [s for s in all_scores if s["positive_similarity"] >= positive_threshold]
+
+            if qualified_pos_pages:
+                # 有達到正例閾值但反例不符合的情況
+                min_neg_in_qualified = min((s["negative_similarity"] for s in qualified_pos_pages))
+                error_msg = f"未找到符合條件的頁面。有 {len(qualified_pos_pages)} 頁達到正例閾值 >= {positive_threshold}，但它們的反例分數（最低: {min_neg_in_qualified:.4f}）都未低於反例閾值 <= {negative_threshold}。請降低反例閾值。"
+            else:
+                # 沒有任何頁面達到正例閾值
+                error_msg = f"未找到符合條件的頁面。所有頁面的正例分數（最高: {max_pos:.4f}）都未達到正例閾值 >= {positive_threshold}。請降低正例閾值。"
+
             return PageMatchResponse(
                 success=False,
-                error=f"未找到符合條件的頁面。請調整閾值參數。",
+                error=error_msg,
                 all_page_scores=all_scores
             )
 
-        print(f"找到最佳匹配頁面: 第 {best_page_index + 1} 頁, 分數: {best_score:.4f}")
+        # 按正例分數排序，選出 TOP 5
+        candidates.sort(key=lambda x: x["positive_similarity"], reverse=True)
+        top5_candidates = candidates[:5]
+
+        # 從 TOP 5 中選出反例分數最低的
+        best_candidate = min(top5_candidates, key=lambda x: x["negative_similarity"])
+
+        best_page_index = best_candidate["page_index"]
+        best_page_image = best_candidate["page_image"]
+
+        print(f"找到最佳匹配頁面: 第 {best_page_index + 1} 頁")
+        print(f"  正例相似度: {best_candidate['positive_similarity']:.4f}")
+        print(f"  反例相似度: {best_candidate['negative_similarity']:.4f}")
+        print(f"  候選頁面總數: {len(candidates)}, TOP 5 選擇")
 
         # 將匹配的頁面轉換為 Base64
         buffered = io.BytesIO()
@@ -245,7 +268,7 @@ async def match_pdf_page(
         return PageMatchResponse(
             success=True,
             matched_page_number=best_page_index + 1,
-            matching_score=float(best_score),
+            matching_score=float(best_candidate["positive_similarity"]),
             matched_page_base64=img_base64,
             all_page_scores=all_scores
         )

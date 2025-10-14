@@ -287,7 +287,7 @@ async function handleStandardSubmit() {
             updateStatus('success', '處理完成');
             bindImageClickEvents();
         } else {
-            resultDiv.innerHTML = createErrorHTML('識別失敗', result.error);
+            resultDiv.innerHTML = createErrorHTML('識別失敗', result.detail);
             updateStatus('error', '處理失敗');
         }
     } catch (error) {
@@ -383,7 +383,7 @@ async function handleMatchingSubmit() {
             updateStatus('success', '處理完成');
             bindImageClickEvents();
         } else {
-            resultDiv.innerHTML = createErrorHTML('識別失敗', result.error);
+            resultDiv.innerHTML = createErrorHTML('識別失敗', result.detail || '未知錯誤');
             updateStatus('error', '處理失敗');
         }
     } catch (error) {
