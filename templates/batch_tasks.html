@@ -618,8 +618,9 @@
                 <div class="form-group">
                     <label class="form-label">關鍵字列表</label>
                     <div class="keywords-input">
-                        <input type="text" class="form-input" id="keywordInput" placeholder="輸入關鍵字後按 Enter">
+                        <input type="text" class="form-input" id="keywordInput" placeholder="輸入關鍵字（多個關鍵字以空格分隔）後按 Enter">
                     </div>
+                    <small style="color: #6b7280; display: block; margin-top: 5px;">提示：可一次輸入多個關鍵字，以空格分隔，例如：報告編號 製作日期 報告類別 申請者 申請者地址 法規項目名稱 廠牌 型式系列 型式名稱 檢測機構 檢測報告編號 原「車輛安全檢測基準審查報告」之報告編號 型式系列編號 型式編號 申請者名稱</small>
                     <div id="keywordsList"></div>
                 </div>
                 <div class="form-group">
@@ -1186,9 +1187,19 @@
             input.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    const keyword = input.value.trim();
-                    if (keyword && !keywords.includes(keyword)) {
-                        keywords.push(keyword);
+                    const inputValue = input.value.trim();
+
+                    if (inputValue) {
+                        // 以空格分割多個關鍵字
+                        const newKeywords = inputValue.split(/\s+/).filter(kw => kw.trim() !== '');
+
+                        // 添加不重複的關鍵字
+                        newKeywords.forEach(keyword => {
+                            if (keyword && !keywords.includes(keyword)) {
+                                keywords.push(keyword);
+                            }
+                        });
+
                         renderKeywords();
                         input.value = '';
                     }

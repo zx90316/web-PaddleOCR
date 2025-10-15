@@ -9,7 +9,7 @@ SubModules:
   LLM_Chat:
     module_name: chat_bot
     model_name: gemma3:4b
-    base_url: "http://localhost:11434/v1"
+    base_url: "http://192.168.80.24:11434/v1"
     api_type: openai
     api_key: "sk-123456789"
 
@@ -23,7 +23,7 @@ SubModules:
   MLLM_Chat:
     module_name: chat_bot
     model_name: gemma3:4b
-    base_url: "http://localhost:11434/v1"
+    base_url: "http://192.168.80.24:11434/v1"
     api_type: openai
     api_key: "sk-123456789"
 
