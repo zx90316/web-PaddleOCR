@@ -26,7 +26,7 @@ clip_processor = None
 device = None # 新增一個變數來存放設備資訊
 
 # PaddleOCR 服務配置
-PADDLEOCR_SERVICE_URL = os.getenv("PADDLEOCR_SERVICE_URL", "http://192.168.80.24:8080")
+PADDLEOCR_SERVICE_URL = os.getenv("PADDLEOCR_SERVICE_URL", "http://localhost:8080")
 
 def get_clip_model():
     """延遲載入 CLIP 模型"""
@@ -35,8 +35,8 @@ def get_clip_model():
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"偵測到設備: {device}。準備載入 CLIP 模型...")
         print("載入 CLIP 模型...")
-        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
+        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
 
         clip_model.to(device)
         print("CLIP 模型載入完成")
