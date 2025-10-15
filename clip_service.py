@@ -16,6 +16,7 @@ import io
 import tempfile
 import os
 import base64
+import httpx  # 用於調用 PaddleOCR 服務
 
 app = FastAPI(title="CLIP 圖像匹配服務", description="基於 CLIP 的圖像相似度匹配服務")
 
@@ -23,6 +24,9 @@ app = FastAPI(title="CLIP 圖像匹配服務", description="基於 CLIP 的圖�
 clip_model = None
 clip_processor = None
 device = None # 新增一個變數來存放設備資訊
+
+# PaddleOCR 服務配置
+PADDLEOCR_SERVICE_URL = os.getenv("PADDLEOCR_SERVICE_URL", "http://192.168.80.24:8080")
 
 def get_clip_model():
     """延遲載入 CLIP 模型"""
@@ -100,10 +104,74 @@ def pdf_to_images(pdf_path, dpi=200):
     pdf_document.close()
     return images
 
+async def check_page_voided(page_image: Image.Image) -> tuple[bool, dict]:
+    """
+    檢查頁面是否包含廢止關鍵字
+    Args:
+        page_image: PIL Image 對象
+    Returns:
+        (is_voided, ocr_result) - 是否為廢止頁面, OCR 結果
+    """
+    try:
+        # 將圖片轉換為 bytes
+        img_byte_arr = io.BytesIO()
+        page_image.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
+
+        # 調用 PaddleOCR 服務進行 OCR
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            files = {
+                'file': ('page.png', img_byte_arr, 'image/png')
+            }
+            data = {
+                'key_list': '[]',  # 不需要提取關鍵字
+                'use_llm': 'false'  # 不使用 LLM
+            }
+
+            response = await client.post(
+                f"{PADDLEOCR_SERVICE_URL}/ocr",
+                files=files,
+                data=data
+            )
+
+            if response.status_code != 200:
+                print(f"OCR 服務調用失敗: {response.text}")
+                return False, {}
+
+            result = response.json()
+
+            if not result.get('success'):
+                print(f"OCR 處理失敗: {result.get('error')}")
+                return False, {}
+
+            # 從 visual_info_list 中提取所有文字 - 將整個 visual_info 轉成純文字
+            visual_info_list = result.get('data', {}).get('visual_info_list', [])
+
+            # 將 visual_info 轉換為字串
+            import json
+            all_text = json.dumps(visual_info_list, ensure_ascii=False)
+            all_text = all_text.upper()  # 轉為大寫便於比對
+
+            # 檢查是否包含廢止關鍵字
+            void_keywords = ['廢止', '作廢', 'VOID', 'CANCELLED', 'CANCELED']
+            is_voided = any(keyword.upper() in all_text for keyword in void_keywords)
+
+            return is_voided, {
+                'is_voided': is_voided,
+                'found_keywords': [kw for kw in void_keywords if kw.upper() in all_text],
+                'text_snippet': all_text[:200]  # 保存前 200 個字元作為預覽
+            }
+
+    except Exception as e:
+        print(f"廢止檢測失敗: {str(e)}")
+        return False, {'error': str(e)}
+
 class PageMatchRequest(BaseModel):
     """頁面匹配請求模型"""
     positive_threshold: float = 0.95
     negative_threshold: float = 0.55
+    skip_voided: bool = False  # 是否跳過廢止頁面
+    top_n_for_void_check: int = 5  # 檢查前 N 個候選頁面是否為廢止
 
 class PageMatchResponse(BaseModel):
     """頁面匹配響應模型"""
@@ -112,6 +180,7 @@ class PageMatchResponse(BaseModel):
     matching_score: Optional[float] = None
     matched_page_base64: Optional[str] = None  # Base64 編碼的圖像
     all_page_scores: Optional[List[dict]] = None
+    voided_pages_checked: Optional[List[dict]] = None  # 被跳過的廢止頁面資訊
     error: Optional[str] = None
 
 @app.post("/match-page", response_model=PageMatchResponse)
@@ -121,9 +190,12 @@ async def match_pdf_page(
     negative_templates: List[UploadFile] = File(default=[]),
     positive_threshold: float = Form(0.95),
     negative_threshold: float = Form(0.55),
+    skip_voided: bool = Form(False),
+    top_n_for_void_check: int = Form(5),
 ):
     """
     找出 PDF 中最匹配的頁面
+    如果 skip_voided 為 True，則會檢查 TOP N 候選頁面是否包含廢止關鍵字
     """
     temp_pdf_path = None
 
@@ -251,12 +323,60 @@ async def match_pdf_page(
                 all_page_scores=all_scores
             )
 
-        # 按正例分數排序，選出 TOP 5
+        # 按正例分數排序，選出 TOP N 候選頁面
         candidates.sort(key=lambda x: x["positive_similarity"], reverse=True)
-        top5_candidates = candidates[:5]
 
-        # 從 TOP 5 中選出反例分數最低的
-        best_candidate = min(top5_candidates, key=lambda x: x["negative_similarity"])
+        voided_pages_info = []  # 記錄被跳過的廢止頁面
+        best_candidate = None
+
+        # 如果啟用跳過廢止功能
+        if skip_voided:
+            print(f"啟用廢止檢測，將檢查前 {top_n_for_void_check} 個候選頁面")
+
+            # 檢查 TOP N 候選頁面
+            check_count = min(top_n_for_void_check, len(candidates))
+
+            for i in range(check_count):
+                candidate = candidates[i]
+                page_num = candidate["page_index"] + 1
+
+                print(f"檢查第 {page_num} 頁是否為廢止頁面...")
+                is_voided, void_info = await check_page_voided(candidate["page_image"])
+
+                if is_voided:
+                    print(f"  第 {page_num} 頁包含廢止關鍵字，跳過")
+                    voided_pages_info.append({
+                        "page": page_num,
+                        "positive_similarity": float(candidate["positive_similarity"]),
+                        "negative_similarity": float(candidate["negative_similarity"]),
+                        "void_detection": void_info
+                    })
+                else:
+                    print(f"  第 {page_num} 頁未包含廢止關鍵字，選為最佳匹配")
+                    best_candidate = candidate
+                    break
+
+            # 如果所有 TOP N 候選都是廢止頁面
+            if best_candidate is None:
+                # 檢查是否還有其他候選
+                if len(candidates) > check_count:
+                    print(f"前 {check_count} 個候選都是廢止頁面，從剩餘候選中選擇")
+                    # 從剩餘候選中選出反例分數最低的
+                    remaining_candidates = candidates[check_count:]
+                    top5_remaining = remaining_candidates[:5]
+                    best_candidate = min(top5_remaining, key=lambda x: x["negative_similarity"])
+                else:
+                    return PageMatchResponse(
+                        success=False,
+                        error=f"前 {check_count} 個候選頁面都包含廢止關鍵字，沒有找到有效頁面",
+                        voided_pages_checked=voided_pages_info,
+                        all_page_scores=all_scores
+                    )
+        else:
+            # 未啟用跳過廢止功能，使用原邏輯
+            # 從 TOP 5 中選出反例分數最低的
+            top5_candidates = candidates[:5]
+            best_candidate = min(top5_candidates, key=lambda x: x["negative_similarity"])
 
         best_page_index = best_candidate["page_index"]
         best_page_image = best_candidate["page_image"]
@@ -264,7 +384,9 @@ async def match_pdf_page(
         print(f"找到最佳匹配頁面: 第 {best_page_index + 1} 頁")
         print(f"  正例相似度: {best_candidate['positive_similarity']:.4f}")
         print(f"  反例相似度: {best_candidate['negative_similarity']:.4f}")
-        print(f"  候選頁面總數: {len(candidates)}, TOP 5 選擇")
+        print(f"  候選頁面總數: {len(candidates)}")
+        if voided_pages_info:
+            print(f"  跳過的廢止頁面數: {len(voided_pages_info)}")
 
         # 將匹配的頁面轉換為 Base64
         buffered = io.BytesIO()
@@ -276,7 +398,8 @@ async def match_pdf_page(
             matched_page_number=best_page_index + 1,
             matching_score=float(best_candidate["positive_similarity"]),
             matched_page_base64=img_base64,
-            all_page_scores=all_scores
+            all_page_scores=all_scores,
+            voided_pages_checked=voided_pages_info if voided_pages_info else None
         )
 
     except HTTPException:

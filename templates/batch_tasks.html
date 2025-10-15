@@ -590,6 +590,18 @@
                     <label class="form-label">反例相似度閾值</label>
                     <input type="number" class="form-input" name="negative_threshold" value="0.55" step="0.01" min="0" max="1">
                 </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" name="skip_voided" id="skipVoided">
+                        <span class="form-label" style="margin: 0;">跳過廢止頁面</span>
+                    </label>
+                    <small style="color: #6b7280; display: block; margin-top: 5px;">啟用後，系統會檢測候選頁面是否包含「廢止」、「作廢」、「VOID」、「CANCELLED」等關鍵字，並自動跳過這些頁面</small>
+                </div>
+                <div class="form-group" id="topNVoidCheckGroup" style="display: none;">
+                    <label class="form-label">檢查候選數量</label>
+                    <input type="number" class="form-input" name="top_n_for_void_check" id="topNVoidCheck" value="5" min="1" max="20">
+                    <small style="color: #6b7280;">將檢查前 N 個候選頁面是否為廢止頁面（默認: 5）</small>
+                </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('configStage1Modal')">取消</button>
                     <button type="submit" class="btn btn-primary">保存配置並開始處理</button>
@@ -1056,12 +1068,26 @@
                     const config = JSON.parse(data.task.stage1_config);
 
                     // 填充表單
-                    document.getElementById('positiveThreshold').value = config.positive_threshold || 0.95;
-                    document.getElementById('negativeThreshold').value = config.negative_threshold || 0.55;
+                    const posThresholdInput = document.querySelector('input[name="positive_threshold"]');
+                    const negThresholdInput = document.querySelector('input[name="negative_threshold"]');
+                    const skipVoidedCheckbox = document.getElementById('skipVoided');
+                    const topNVoidCheckInput = document.getElementById('topNVoidCheck');
+                    const topNVoidCheckGroup = document.getElementById('topNVoidCheckGroup');
 
-                    // 更新滑桿顯示
-                    document.getElementById('posThresholdValue').textContent = config.positive_threshold || 0.95;
-                    document.getElementById('negThresholdValue').textContent = config.negative_threshold || 0.55;
+                    if (posThresholdInput) posThresholdInput.value = config.positive_threshold || 0.95;
+                    if (negThresholdInput) negThresholdInput.value = config.negative_threshold || 0.55;
+
+                    // 設置跳過廢止選項
+                    if (skipVoidedCheckbox) {
+                        skipVoidedCheckbox.checked = config.skip_voided || false;
+                        // 顯示/隱藏檢查候選數量選項
+                        if (topNVoidCheckGroup) {
+                            topNVoidCheckGroup.style.display = config.skip_voided ? 'block' : 'none';
+                        }
+                    }
+                    if (topNVoidCheckInput) {
+                        topNVoidCheckInput.value = config.top_n_for_void_check || 5;
+                    }
 
                     console.log('已載入第一階段配置:', config);
                 }
@@ -1146,6 +1172,12 @@
             document.getElementById('negativeTemplates').addEventListener('change', function(e) {
                 const count = e.target.files.length;
                 document.getElementById('negativeFilesText').textContent = count > 0 ? `已選擇 ${count} 個檔案` : '點擊選擇反例圖片（可多選）';
+            });
+
+            // 監聽跳過廢止複選框變化
+            document.getElementById('skipVoided').addEventListener('change', function(e) {
+                const topNGroup = document.getElementById('topNVoidCheckGroup');
+                topNGroup.style.display = e.target.checked ? 'block' : 'none';
             });
         }
 

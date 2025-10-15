@@ -75,7 +75,7 @@ class OCRResponse(BaseModel):
     data: Optional[dict] = None
     error: Optional[str] = None
 
-async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadFile], negative_templates: List[UploadFile], positive_threshold: float, negative_threshold: float):
+async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadFile], negative_templates: List[UploadFile], positive_threshold: float, negative_threshold: float, skip_voided: bool = False, top_n_for_void_check: int = 5):
     """
     調用 CLIP 服務進行頁面匹配
     Args:
@@ -84,8 +84,10 @@ async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadF
         negative_templates: 反例範本圖片列表
         positive_threshold: 正例相似度閾值
         negative_threshold: 反例相似度閾值
+        skip_voided: 是否跳過廢止頁面
+        top_n_for_void_check: 檢查前 N 個候選頁面是否為廢止
     Returns:
-        (matched_page_number, matched_page_image, matching_score, all_scores)
+        (matched_page_number, matched_page_image, matching_score, all_scores, voided_pages_checked)
     """
     async with httpx.AsyncClient(timeout=300.0) as client:
         # 準備文件
@@ -110,7 +112,9 @@ async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadF
         # 準備表單數據
         data = {
             'positive_threshold': positive_threshold,
-            'negative_threshold': negative_threshold
+            'negative_threshold': negative_threshold,
+            'skip_voided': skip_voided,
+            'top_n_for_void_check': top_n_for_void_check
         }
 
         # 調用 CLIP 服務
@@ -138,7 +142,8 @@ async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadF
             result.get('matched_page_number'),
             matched_page_image,
             result.get('matching_score'),
-            result.get('all_page_scores', [])
+            result.get('all_page_scores', []),
+            result.get('voided_pages_checked', [])
         )
 
 def perform_ocr_on_file(
@@ -321,6 +326,8 @@ async def process_ocr_with_matching(
     use_llm: bool = Form(True),
     positive_threshold: float = Form(0.25),
     negative_threshold: float = Form(0.30),
+    skip_voided: bool = Form(False),
+    top_n_for_void_check: int = Form(5),
 ):
     """
     處理 PDF 頁面匹配和 OCR 請求
@@ -354,12 +361,14 @@ async def process_ocr_with_matching(
 
         # 調用 CLIP 服務進行頁面匹配
         print(f"調用 CLIP 服務進行頁面匹配...")
-        best_page_number, best_page_image, best_score, all_scores = await call_clip_service(
+        best_page_number, best_page_image, best_score, all_scores, voided_pages = await call_clip_service(
             temp_pdf_path,
             positive_templates,
             negative_templates,
             positive_threshold,
-            negative_threshold
+            negative_threshold,
+            skip_voided,
+            top_n_for_void_check
         )
 
         if best_page_number is None:
@@ -401,9 +410,15 @@ async def process_ocr_with_matching(
             "matched_page_path": f"{task_id}/{matched_page_filename}",
         }
 
+        # 如果有跳過的廢止頁面，添加到結果中
+        if voided_pages:
+            response_data["voided_pages_checked"] = voided_pages
+
         # 更新 settings 以包含匹配閾值
         response_data["settings"]["positive_threshold"] = positive_threshold
         response_data["settings"]["negative_threshold"] = negative_threshold
+        response_data["settings"]["skip_voided"] = skip_voided
+        response_data["settings"]["top_n_for_void_check"] = top_n_for_void_check
 
         # 保存 response_data 到 JSON 檔案
         response_file = os.path.join(task_output_dir, "response.json")
@@ -641,7 +656,9 @@ async def configure_stage1(
     positive_templates: List[UploadFile] = File(...),
     negative_templates: List[UploadFile] = File(default=[]),
     positive_threshold: float = Form(0.25),
-    negative_threshold: float = Form(0.30)
+    negative_threshold: float = Form(0.30),
+    skip_voided: bool = Form(False),
+    top_n_for_void_check: int = Form(5)
 ):
     """配置第一階段參數"""
     try:
@@ -663,7 +680,9 @@ async def configure_stage1(
             'positive_templates': positive_b64_list,
             'negative_templates': negative_b64_list,
             'positive_threshold': positive_threshold,
-            'negative_threshold': negative_threshold
+            'negative_threshold': negative_threshold,
+            'skip_voided': skip_voided,
+            'top_n_for_void_check': top_n_for_void_check
         }
 
         batch_db.save_task_stage1_config(task_id, config)

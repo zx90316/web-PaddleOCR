@@ -64,6 +64,17 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('negThresholdValue').textContent = e.target.value;
     });
 
+    // 監聽跳過廢止複選框變化
+    const skipVoidedCheckbox = document.getElementById('skipVoided');
+    if (skipVoidedCheckbox) {
+        skipVoidedCheckbox.addEventListener('change', function(e) {
+            const topNGroup = document.getElementById('topNVoidCheckGroup');
+            if (topNGroup) {
+                topNGroup.style.display = e.target.checked ? 'block' : 'none';
+            }
+        });
+    }
+
     // 處理預設關鍵字按鈕點擊事件
     document.querySelectorAll('.keyword-btn').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -314,6 +325,8 @@ async function handleMatchingSubmit() {
     const useLLM = document.getElementById('useLLM').checked;
     const positiveThreshold = document.getElementById('positiveThreshold').value;
     const negativeThreshold = document.getElementById('negativeThreshold').value;
+    const skipVoided = document.getElementById('skipVoided').checked;
+    const topNVoidCheck = document.getElementById('topNVoidCheck').value;
 
     // 驗證輸入
     if (!pdfInput.files[0]) {
@@ -357,6 +370,8 @@ async function handleMatchingSubmit() {
     formData.append('use_llm', useLLM);
     formData.append('positive_threshold', positiveThreshold);
     formData.append('negative_threshold', negativeThreshold);
+    formData.append('skip_voided', skipVoided);
+    formData.append('top_n_for_void_check', topNVoidCheck);
 
     // 更新UI狀態
     const submitButton = document.querySelector('button[type="submit"]');
@@ -410,11 +425,30 @@ function createMatchingSuccessHTML(data) {
     console.log('Matching OCR Response data:', data);
 
     // 頁面匹配結果
+    let voidedPagesHTML = '';
+    if (data.voided_pages_checked && data.voided_pages_checked.length > 0) {
+        voidedPagesHTML = `
+            <details style="margin-top: 10px;">
+                <summary>⚠️ 跳過的廢止頁面 (${data.voided_pages_checked.length} 頁)</summary>
+                <div style="margin-top: 10px;">
+                    ${data.voided_pages_checked.map(page => `
+                        <div style="border-left: 3px solid #ef4444; padding-left: 10px; margin-bottom: 10px;">
+                            <p><strong>第 ${page.page} 頁</strong> - 正例分數: ${page.positive_similarity.toFixed(4)}, 反例分數: ${page.negative_similarity.toFixed(4)}</p>
+                            <p style="font-size: 12px; color: #dc2626;">檢測到關鍵字: ${page.void_detection.found_keywords.join(', ')}</p>
+                            <p style="font-size: 11px; color: #6b7280;">內容預覽: ${page.void_detection.text_snippet}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </details>
+        `;
+    }
+
     let matchingResultHTML = `
         <div class="result-section matching-result">
             <h4>🎯 頁面匹配結果</h4>
             <p><strong>匹配頁碼：</strong>第 ${data.matched_page_number} 頁</p>
             <p><strong>匹配分數：</strong>${data.matching_score.toFixed(4)}</p>
+            ${voidedPagesHTML}
             <details>
                 <summary>查看所有頁面分數</summary>
                 <pre class="json-result">${JSON.stringify(data.all_page_scores, null, 2)}</pre>
@@ -460,6 +494,7 @@ function createMatchingSuccessHTML(data) {
                 <p><strong>查詢的關鍵字：</strong> ${data.key_list.join(', ')}</p>
                 <p><strong>正例相似度閾值：</strong> ${data.settings.positive_threshold}</p>
                 <p><strong>反例相似度閾值：</strong> ${data.settings.negative_threshold}</p>
+                ${data.settings.skip_voided ? `<p><strong>跳過廢止頁面：</strong> 已啟用 (檢查前 ${data.settings.top_n_for_void_check} 個候選)</p>` : ''}
                 <p><strong>使用大模型提取結果：</strong> ${data.settings.use_llm ? '已啟用' : '未啟用'}</p>
                 <p><strong>文檔方向分類：</strong> ${data.settings.use_doc_orientation_classify ? '已啟用' : '未啟用'}</p>
                 <p><strong>文檔去彎曲：</strong> ${data.settings.use_doc_unwarping ? '已啟用' : '未啟用'}</p>

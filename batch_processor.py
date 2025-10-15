@@ -112,7 +112,9 @@ async def process_file_stage1(file_info: Dict, task_config: Dict, clip_service_u
             # 準備表單數據
             data = {
                 'positive_threshold': task_config.get('positive_threshold', 0.25),
-                'negative_threshold': task_config.get('negative_threshold', 0.30)
+                'negative_threshold': task_config.get('negative_threshold', 0.30),
+                'skip_voided': task_config.get('skip_voided', False),
+                'top_n_for_void_check': task_config.get('top_n_for_void_check', 5)
             }
 
             # 調用 CLIP 服務
@@ -135,7 +137,8 @@ async def process_file_stage1(file_info: Dict, task_config: Dict, clip_service_u
                 'matched_page_number': result.get('matched_page_number'),
                 'matched_page_base64': result.get('matched_page_base64'),
                 'matching_score': result.get('matching_score'),
-                'all_page_scores': result.get('all_page_scores', [])
+                'all_page_scores': result.get('all_page_scores', []),
+                'voided_pages_checked': result.get('voided_pages_checked', [])
             }
 
     except Exception as e:

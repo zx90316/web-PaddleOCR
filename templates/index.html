@@ -86,6 +86,20 @@ Core OCR functionality is provided by PaddleOCR.
                         <label for="negativeThreshold" style="margin-top: 10px;">反例相似度閾值：<span id="negThresholdValue">0.55</span></label>
                         <input type="range" id="negativeThreshold" name="negative_threshold" min="0" max="1" step="0.01" value="0.55">
                     </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>
+                            <input type="checkbox" id="skipVoided" name="skip_voided">
+                            跳過廢止頁面
+                        </label>
+                        <p style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 20px;">啟用後，系統會檢測候選頁面是否包含「廢止」、「作廢」、「VOID」、「CANCELLED」等關鍵字，並自動跳過這些頁面</p>
+                    </div>
+
+                    <div class="form-group" id="topNVoidCheckGroup" style="display: none; margin-top: 10px;">
+                        <label for="topNVoidCheck">檢查候選數量：</label>
+                        <input type="number" id="topNVoidCheck" name="top_n_for_void_check" value="5" min="1" max="20" style="width: 80px;">
+                        <p style="font-size: 12px; color: #6b7280; margin-top: 5px;">將檢查前 N 個候選頁面是否為廢止頁面（默認: 5）</p>
+                    </div>
                 </div>
                 
                 <div class="form-group">
