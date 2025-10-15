@@ -35,6 +35,7 @@ import httpx  # 用於調用 CLIP 服務
 import base64
 import task_database as batch_db
 import batch_processor
+from urllib.parse import quote
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
@@ -60,7 +61,7 @@ pipeline = create_pipeline(
     )
 
 # CLIP 服務配置
-CLIP_SERVICE_URL = os.getenv("CLIP_SERVICE_URL", "http://localhost:8081")
+CLIP_SERVICE_URL = os.getenv("CLIP_SERVICE_URL", "http://192.168.80.24:8081")
 
 # 請求模型
 class OCRRequest(BaseModel):
@@ -756,7 +757,7 @@ async def stop_task_processing(task_id: str):
 async def restart_stage1_processing(task_id: str):
     """重新開始第一階段"""
     try:
-        batch_processor.restart_task_stage1(task_id)
+        batch_processor.restart_task_stage1(task_id, CLIP_SERVICE_URL)
         return {"success": True, "message": "第一階段已重新啟動"}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -867,14 +868,18 @@ async def get_file_original_pdf(task_id: str, file_id: int):
         file_path = row['file_path']
         file_name = row['file_name']
 
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail=f"檔案不存在於路徑: {file_path}")
+        # 返回文件 - 使用URL編碼處理中文檔名
+        
+        encoded_filename = quote(file_name)
+
+        headers = {
+            'Content-Disposition': f'inline; filename*=UTF-8\'\'{encoded_filename}'
+        }
 
         return FileResponse(
             path=file_path,
             media_type="application/pdf",
-            filename=file_name,
-            headers={"Content-Disposition": f"inline; filename={file_name}"}
+            headers=headers
         )
 
     except HTTPException:
@@ -996,7 +1001,6 @@ async def export_task_to_excel(task_id: str):
         output.seek(0)
 
         # 返回文件 - 使用URL編碼處理中文檔名
-        from urllib.parse import quote
         filename = f"{task['task_name']}_{task_id[:8]}.xlsx"
         encoded_filename = quote(filename)
         return StreamingResponse(

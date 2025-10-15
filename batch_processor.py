@@ -443,7 +443,7 @@ def stop_task(task_id: str):
 
     task_control[task_id]["stop"] = True
 
-def restart_task_stage1(task_id: str):
+def restart_task_stage1(task_id: str, CLIP_SERVICE_URL : str):
     """重新開始第一階段"""
     # 停止現有任務
     if task_id in processing_tasks:
@@ -465,7 +465,7 @@ def restart_task_stage1(task_id: str):
     conn.commit()
 
     # 重新啟動
-    start_task_stage1(task_id)
+    start_task_stage1(task_id,CLIP_SERVICE_URL)
 
 def restart_task_stage2(task_id: str):
     """重新開始第二階段"""

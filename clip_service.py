@@ -22,16 +22,21 @@ app = FastAPI(title="CLIP 圖像匹配服務", description="基於 CLIP 的圖�
 # 全局模型變量（延遲載入）
 clip_model = None
 clip_processor = None
+device = None # 新增一個變數來存放設備資訊
 
 def get_clip_model():
     """延遲載入 CLIP 模型"""
-    global clip_model, clip_processor
+    global clip_model, clip_processor ,device
     if clip_model is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"偵測到設備: {device}。準備載入 CLIP 模型...")
         print("載入 CLIP 模型...")
         clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        clip_model.to(device)
         print("CLIP 模型載入完成")
-    return clip_model, clip_processor
+    return clip_model, clip_processor , device
 
 def compute_image_similarity(image, template_images, model, processor):
     """
@@ -46,6 +51,7 @@ def compute_image_similarity(image, template_images, model, processor):
     """
     # 處理圖像
     inputs = processor(images=[image] + template_images, return_tensors="pt", padding=True)
+    inputs = {key: tensor.to(device) for key, tensor in inputs.items()}
 
     with torch.no_grad():
         image_features = model.get_image_features(**inputs)
@@ -127,7 +133,7 @@ async def match_pdf_page(
             raise HTTPException(status_code=400, detail="請上傳有效的 PDF 檔案")
 
         # 載入 CLIP 模型
-        model, processor = get_clip_model()
+        model, processor , current_device = get_clip_model()
 
         # 保存 PDF 到臨時檔案
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:

@@ -34,6 +34,7 @@
 python -m venv venv_clip
 venv_clip\Scripts\activate  # Windows
 # source venv_clip/bin/activate  # Linux/Mac
+python -m pip install --upgrade pip
 pip install -r requirements_clip.txt
 deactivate
 
@@ -41,6 +42,7 @@ deactivate
 python -m venv venv_paddle
 venv_paddle\Scripts\activate  # Windows
 # source venv_paddle/bin/activate  # Linux/Mac
+python -m pip install --upgrade pip
 pip install -r requirements_paddle.txt
 deactivate
 ```

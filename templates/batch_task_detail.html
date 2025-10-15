@@ -787,7 +787,7 @@
 
             const html = sortedFolders.map(folderPath => {
                 const folderFiles = folderTree[folderPath];
-                const folderId = 'folder_' + btoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
+                const folderId = 'folder_' + safeBtoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
 
                 return `
                     <div class="tree-folder">
@@ -804,6 +804,10 @@
             }).join('');
 
             container.innerHTML = html;
+        }
+
+        function safeBtoa(str) {
+            return btoa(unescape(encodeURIComponent(str)));
         }
 
         function renderFolderFiles(files, folderId) {
@@ -933,7 +937,7 @@
 
                     list.innerHTML = sortedFolders.map(folderPath => {
                         const folderFiles = folderTree[folderPath];
-                        const folderId = 'files_folder_' + btoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
+                        const folderId = 'files_folder_' + safeBtoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
 
                         return `
                             <div class="file-tree-folder">
@@ -1007,7 +1011,7 @@
 
                     list.innerHTML = sortedFolders.map(folderPath => {
                         const folderFiles = folderTree[folderPath];
-                        const folderId = 'results_folder_' + btoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
+                        const folderId = 'results_folder_' + safeBtoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
 
                         return `
                             <div class="result-tree-folder">
@@ -1109,7 +1113,7 @@
 
                     list.innerHTML = sortedFolders.map(folderPath => {
                         const folderFiles = folderTree[folderPath];
-                        const folderId = 'errors_folder_' + btoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
+                        const folderId = 'errors_folder_' + safeBtoa(folderPath).replace(/[^a-zA-Z0-9]/g, '_');
 
                         return `
                             <div class="result-tree-folder">

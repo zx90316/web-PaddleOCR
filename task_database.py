@@ -16,7 +16,7 @@ _local = threading.local()
 def get_connection():
     """獲取線程本地的資料庫連接"""
     if not hasattr(_local, 'conn'):
-        _local.conn = sqlite3.connect('batch_tasks.db', check_same_thread=False)
+        _local.conn = sqlite3.connect('D:\\web-PaddleOCR\\batch_tasks.db', check_same_thread=False)
         _local.conn.row_factory = sqlite3.Row
     return _local.conn
 
