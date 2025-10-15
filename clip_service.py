@@ -69,8 +69,8 @@ def compute_image_similarity(image, template_images, model, processor):
     if len(template_images) == 1:
         return similarities.item()
 
-    # 返回平均相似度
-    return similarities.mean().item()
+    # 返回最高的相似度分數
+    return similarities.max().item()
 
 def pdf_to_images(pdf_path, dpi=200):
     """

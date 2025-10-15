@@ -1,7 +1,7 @@
 # CLIP 圖像匹配服務依賴
 # 此環境使用 PyTorch，與 PaddlePaddle 分離以避免 cuDNN 衝突
 
---extra-index-url https://download.pytorch.org/whl/cu128
+--extra-index-url https://download.pytorch.org/whl/cu129
 
 fastapi
 uvicorn

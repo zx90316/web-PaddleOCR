@@ -1,7 +1,7 @@
 # PaddleOCR 主服務依賴
 # 此環境使用 PaddlePaddle，與 PyTorch 分離以避免 cuDNN 衝突
 
---extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu129/
 
 # PaddlePaddle 和相關套件
 paddlepaddle-gpu
