@@ -634,19 +634,54 @@ async def get_batch_task_files(
     stage1_status: Optional[str] = None,
     stage2_status: Optional[str] = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
+    exclude_base64: bool = True
 ):
-    """取得任務的檔案列表"""
+    """
+    取得任務的檔案列表
+
+    Args:
+        task_id: 任務ID
+        status: 狀態篩選
+        stage1_status: 第一階段狀態篩選
+        stage2_status: 第二階段狀態篩選
+        limit: 每頁數量(預設50,最大500)
+        offset: 偏移量
+        exclude_base64: 是否排除Base64圖片資料(預設True)
+    """
     try:
+        # 限制最大每頁數量,避免記憶體過載
+        limit = min(limit, 500)
+
+        # 取得檔案列表(不包含Base64以節省記憶體)
         files = batch_db.get_task_files(
             task_id,
             status=status,
             stage1_status=stage1_status,
             stage2_status=stage2_status,
             limit=limit,
-            offset=offset
+            offset=offset,
+            exclude_base64=exclude_base64
         )
-        return {"success": True, "files": files}
+
+        # 取得符合條件的總數量
+        total_count = batch_db.get_task_files_count(
+            task_id,
+            status=status,
+            stage1_status=stage1_status,
+            stage2_status=stage2_status
+        )
+
+        return {
+            "success": True,
+            "files": files,
+            "pagination": {
+                "total": total_count,
+                "limit": limit,
+                "offset": offset,
+                "has_more": (offset + limit) < total_count
+            }
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -936,7 +971,7 @@ async def get_task_preview(task_id: str, limit: int = 10):
 
 @app.get("/api/batch-tasks/{task_id}/export")
 async def export_task_to_excel(task_id: str):
-    """匯出任務結果為 Excel"""
+    """匯出任務結果為 Excel (分批處理避免記憶體過載)"""
     try:
         from fastapi.responses import StreamingResponse
         import openpyxl
@@ -947,9 +982,6 @@ async def export_task_to_excel(task_id: str):
         task = batch_db.get_task_by_id(task_id)
         if not task:
             return {"success": False, "error": "任務不存在"}
-
-        # 取得所有檔案
-        files = batch_db.get_task_files(task_id)
 
         # 取得關鍵字
         keywords = batch_db.get_task_keywords(task_id)
@@ -975,31 +1007,56 @@ async def export_task_to_excel(task_id: str):
             cell.fill = title_fill
             cell.alignment = title_alignment
 
-        # 寫入數據
-        for row_idx, file_info in enumerate(files, start=2):
-            ws.cell(row=row_idx, column=1, value=file_info['file_name'])
-            ws.cell(row=row_idx, column=2, value=file_info['file_path'])
-            ws.cell(row=row_idx, column=3, value=file_info['status'])
-            ws.cell(row=row_idx, column=4, value=file_info['matched_page_number'])
-            ws.cell(row=row_idx, column=5, value=file_info['matching_score'])
+        # 分批處理檔案資料,避免一次載入過多記憶體
+        batch_size = 100
+        offset = 0
+        row_idx = 2
 
-            # 解析提取的關鍵字
-            extracted_keywords = {}
-            if file_info['extracted_keywords']:
-                try:
-                    extracted_keywords = json.loads(file_info['extracted_keywords'])
-                except:
-                    pass
+        while True:
+            # 每次只載入 100 筆資料,並排除 Base64 圖片
+            files = batch_db.get_task_files(
+                task_id,
+                limit=batch_size,
+                offset=offset,
+                exclude_base64=True
+            )
 
-            # 寫入關鍵字值
-            for kw_idx, keyword in enumerate(keywords):
-                col_idx = 6 + kw_idx
-                value = extracted_keywords.get(keyword, "")
-                ws.cell(row=row_idx, column=col_idx, value=value)
+            if not files:
+                break
 
-            # 處理時間和錯誤訊息
-            ws.cell(row=row_idx, column=6 + len(keywords), value=file_info['processed_at'])
-            ws.cell(row=row_idx, column=7 + len(keywords), value=file_info['error_message'])
+            # 寫入這批資料
+            for file_info in files:
+                ws.cell(row=row_idx, column=1, value=file_info['file_name'])
+                ws.cell(row=row_idx, column=2, value=file_info['file_path'])
+                ws.cell(row=row_idx, column=3, value=file_info['status'])
+                ws.cell(row=row_idx, column=4, value=file_info['matched_page_number'])
+                ws.cell(row=row_idx, column=5, value=file_info['matching_score'])
+
+                # 解析提取的關鍵字
+                extracted_keywords = {}
+                if file_info['extracted_keywords']:
+                    try:
+                        extracted_keywords = json.loads(file_info['extracted_keywords'])
+                    except:
+                        pass
+
+                # 寫入關鍵字值
+                for kw_idx, keyword in enumerate(keywords):
+                    col_idx = 6 + kw_idx
+                    value = extracted_keywords.get(keyword, "")
+                    ws.cell(row=row_idx, column=col_idx, value=value)
+
+                # 處理時間和錯誤訊息
+                ws.cell(row=row_idx, column=6 + len(keywords), value=file_info['processed_at'])
+                ws.cell(row=row_idx, column=7 + len(keywords), value=file_info['error_message'])
+
+                row_idx += 1
+
+            offset += batch_size
+
+            # 如果這批資料少於 batch_size,表示已經是最後一批
+            if len(files) < batch_size:
+                break
 
         # 自動調整欄寬
         for column in ws.columns:

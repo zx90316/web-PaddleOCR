@@ -281,12 +281,33 @@ def get_task_files(task_id: str, status: Optional[str] = None,
                    stage1_status: Optional[str] = None,
                    stage2_status: Optional[str] = None,
                    limit: Optional[int] = None,
-                   offset: int = 0) -> List[Dict]:
-    """取得任務的檔案列表"""
+                   offset: int = 0,
+                   exclude_base64: bool = True) -> List[Dict]:
+    """
+    取得任務的檔案列表
+
+    Args:
+        task_id: 任務ID
+        status: 篩選狀態
+        stage1_status: 第一階段狀態
+        stage2_status: 第二階段狀態
+        limit: 限制數量
+        offset: 偏移量
+        exclude_base64: 是否排除 Base64 圖片資料(預設True以節省記憶體)
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
-    query = 'SELECT * FROM batch_files WHERE task_id = ?'
+    # 選擇性排除 Base64 欄位以節省記憶體
+    if exclude_base64:
+        query = '''SELECT id, task_id, file_path, file_name, file_size, file_type,
+                   status, stage1_status, stage2_status, stage1_result, stage2_result,
+                   matched_page_number, NULL as matched_page_base64, matching_score,
+                   ocr_result, extracted_keywords, error_message, processed_at
+                   FROM batch_files WHERE task_id = ?'''
+    else:
+        query = 'SELECT * FROM batch_files WHERE task_id = ?'
+
     params = [task_id]
 
     if status:
@@ -418,6 +439,43 @@ def get_task_statistics(task_id: str) -> Dict:
 
     row = cursor.fetchone()
     return dict(row) if row else {}
+
+def get_task_files_count(task_id: str, status: Optional[str] = None,
+                         stage1_status: Optional[str] = None,
+                         stage2_status: Optional[str] = None) -> int:
+    """
+    取得任務的檔案數量(不載入資料,僅計數)
+
+    Args:
+        task_id: 任務ID
+        status: 篩選狀態
+        stage1_status: 第一階段狀態
+        stage2_status: 第二階段狀態
+
+    Returns:
+        符合條件的檔案數量
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = 'SELECT COUNT(*) as count FROM batch_files WHERE task_id = ?'
+    params = [task_id]
+
+    if status:
+        query += ' AND status = ?'
+        params.append(status)
+
+    if stage1_status:
+        query += ' AND stage1_status = ?'
+        params.append(stage1_status)
+
+    if stage2_status:
+        query += ' AND stage2_status = ?'
+        params.append(stage2_status)
+
+    cursor.execute(query, params)
+    row = cursor.fetchone()
+    return row['count'] if row else 0
 
 if __name__ == "__main__":
     init_database()
