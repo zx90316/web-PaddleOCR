@@ -825,7 +825,7 @@ async def restart_stage2_processing(task_id: str):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.post("/api/batch-tasks/{task_id}/resume")
+@app.post("/api/batch-tasks/{task_id}/faile_resume")
 async def resume_failed_task(task_id: str):
     """
     從失敗點繼續執行任務
