@@ -789,15 +789,6 @@ async def pause_task_processing(task_id: str):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.post("/api/batch-tasks/{task_id}/resume")
-async def resume_task_processing(task_id: str):
-    """恢復任務"""
-    try:
-        batch_processor.resume_task(task_id)
-        return {"success": True, "message": "任務已恢復"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
 @app.post("/api/batch-tasks/{task_id}/stop")
 async def stop_task_processing(task_id: str):
     """停止任務"""
@@ -825,7 +816,7 @@ async def restart_stage2_processing(task_id: str):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.post("/api/batch-tasks/{task_id}/faile_resume")
+@app.post("/api/batch-tasks/{task_id}/resume")
 async def resume_failed_task(task_id: str):
     """
     從失敗點繼續執行任務

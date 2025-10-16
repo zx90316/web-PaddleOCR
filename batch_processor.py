@@ -518,8 +518,8 @@ def resume_task_from_failure(task_id: str, clip_service_url: str = "http://local
         raise Exception("任務不存在")
 
     # 檢查任務狀態
-    if task['status'] not in ['failed', 'stopped']:
-        raise Exception(f"只有失敗或已停止的任務才能繼續執行,當前狀態: {task['status']}")
+    if task['status'] not in ['failed', 'stopped' , 'paused']:
+        raise Exception(f"只有失敗或已停止或暫停的任務才能繼續執行,當前狀態: {task['status']}")
 
     # 檢查是否已在處理中
     if task_id in processing_tasks:

@@ -645,25 +645,75 @@
         let keywords = [];
         let isRestartMode = false; // 標記是否為重啟模式
         let refreshInterval = null;
+        let isPageVisible = true; // 追蹤頁面可見性
 
         // 頁面加載時獲取任務列表
         document.addEventListener('DOMContentLoaded', function() {
-            loadTasks();
+            loadAllTasks(); // 初次載入所有任務
             setupFileInputListeners();
             setupKeywordInput();
+            setupPageVisibilityListener(); // 設置頁面可見性監聽
 
-            // 每 3 秒刷新任務列表
-            refreshInterval = setInterval(loadTasks, 3000);
+            // 每 5 秒只刷新處理中的任務
+            startRefreshInterval();
         });
 
-        async function loadTasks() {
+        /**
+         * 設置頁面可見性監聽器
+         * 當頁面切換到背景時暫停刷新,切回前景時恢復刷新
+         */
+        function setupPageVisibilityListener() {
+            // 監聽頁面可見性變化
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) {
+                    // 頁面不可見,暫停刷新
+                    console.log('頁面切換到背景,暫停定時刷新');
+                    isPageVisible = false;
+                    stopRefreshInterval();
+                } else {
+                    // 頁面可見,恢復刷新
+                    console.log('頁面切換到前景,恢復定時刷新');
+                    isPageVisible = true;
+                    // 立即執行一次刷新,然後啟動定時器
+                    refreshRunningTasks();
+                    startRefreshInterval();
+                }
+            });
+        }
+
+        /**
+         * 啟動定時刷新
+         */
+        function startRefreshInterval() {
+            // 確保沒有重複的定時器
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            refreshInterval = setInterval(refreshRunningTasks, 5000);
+        }
+
+        /**
+         * 停止定時刷新
+         */
+        function stopRefreshInterval() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        async function loadAllTasks() {
+            /**
+             * 完整載入所有任務及其統計資訊
+             * 用於初次進入頁面或手動刷新
+             */
             try {
                 const response = await fetch('/api/batch-tasks');
                 const data = await response.json();
 
                 if (data.success) {
                     tasks = data.tasks;
-                    
+
                     // 為每個任務加載統計資訊
                     await Promise.all(tasks.map(async (task) => {
                         try {
@@ -676,7 +726,7 @@
                             console.error(`載入任務 ${task.task_id} 統計資訊失敗:`, error);
                         }
                     }));
-                    
+
                     renderTasks();
 
                     // 如果有選中的任務，刷新詳情
@@ -687,6 +737,66 @@
             } catch (error) {
                 console.error('載入任務失敗:', error);
             }
+        }
+
+        async function refreshRunningTasks() {
+            /**
+             * 只刷新處理中(running)和暫停(paused)狀態的任務
+             * 減少不必要的 API 調用,提升效能
+             */
+            try {
+                // 找出需要刷新的任務(running 或 paused 狀態)
+                const tasksToRefresh = tasks.filter(task =>
+                    task.status === 'running' || task.status === 'paused'
+                );
+
+                if (tasksToRefresh.length === 0) {
+                    // 沒有需要刷新的任務,跳過
+                    return;
+                }
+
+                console.log(`刷新 ${tasksToRefresh.length} 個處理中的任務`);
+
+                // 只為處理中的任務更新統計資訊
+                await Promise.all(tasksToRefresh.map(async (task) => {
+                    try {
+                        const statsResponse = await fetch(`/api/batch-tasks/${task.task_id}`);
+                        const statsData = await statsResponse.json();
+                        if (statsData.success) {
+                            // 更新任務狀態和統計資訊
+                            const taskIndex = tasks.findIndex(t => t.task_id === task.task_id);
+                            if (taskIndex !== -1) {
+                                tasks[taskIndex].status = statsData.task.status;
+                                tasks[taskIndex].stage = statsData.task.stage;
+                                tasks[taskIndex].progress = statsData.task.progress;
+                                tasks[taskIndex].statistics = statsData.statistics;
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`刷新任務 ${task.task_id} 統計資訊失敗:`, error);
+                    }
+                }));
+
+                renderTasks();
+
+                // 如果選中的任務是處理中狀態,也刷新詳情
+                if (selectedTaskId) {
+                    const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
+                    if (selectedTask && (selectedTask.status === 'running' || selectedTask.status === 'paused')) {
+                        loadTaskDetail(selectedTaskId);
+                    }
+                }
+            } catch (error) {
+                console.error('刷新處理中任務失敗:', error);
+            }
+        }
+
+        async function loadTasks() {
+            /**
+             * 保留此函數以供手動刷新使用
+             * 實際上調用 loadAllTasks
+             */
+            await loadAllTasks();
         }
 
         function renderTasks() {
@@ -1192,7 +1302,8 @@
             if (!confirm(message)) return;
 
             try {
-                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/faile_resume`, {
+                // 調整失敗點繼續執行的 API 路徑
+                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/resume`, {
                     method: 'POST'
                 });
                 const data = await response.json();
