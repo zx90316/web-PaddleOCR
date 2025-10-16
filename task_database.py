@@ -477,5 +477,33 @@ def get_task_files_count(task_id: str, status: Optional[str] = None,
     row = cursor.fetchone()
     return row['count'] if row else 0
 
+def reset_task_status_for_resume(task_id: str, stage: int):
+    """
+    重置任務狀態以便繼續執行(從中斷點繼續)
+
+    此函數不會重置已完成或已失敗的檔案,只重置任務本身的狀態
+    讓處理器可以繼續處理 pending 狀態的檔案
+
+    Args:
+        task_id: 任務ID
+        stage: 要繼續的階段 (1 或 2)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 只重置任務狀態,不動檔案狀態
+    # 處理器會自動跳過 completed 和 failed 的檔案,只處理 pending 的
+    cursor.execute('''
+        UPDATE batch_tasks
+        SET status = 'running',
+            stage = ?,
+            error_message = NULL,
+            updated_at = ?
+        WHERE task_id = ?
+    ''', (stage, datetime.now().isoformat(), task_id))
+
+    conn.commit()
+    print(f"任務 {task_id} 狀態已重置,準備從第 {stage} 階段繼續執行")
+
 if __name__ == "__main__":
     init_database()

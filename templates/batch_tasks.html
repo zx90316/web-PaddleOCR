@@ -821,6 +821,12 @@
             // 查看詳情按鈕（有第一階段完成的檔案時顯示）
             buttons.push(`<a href="/batch-tasks/${task.task_id}/detail" class="btn btn-primary" target="_blank">📊 查看詳情</a>`);
 
+            // 失敗狀態的繼續執行按鈕
+            if (task.status === 'failed') {
+                buttons.push('<button class="btn btn-warning" onclick="resumeFailedTask()" style="background: #f59e0b;">🔄 從失敗點繼續執行</button>');
+                buttons.push('<button class="btn btn-secondary" onclick="restartFromBeginning()">🔁 從頭重新開始</button>');
+            }
+
             // 第一階段控制
             if (!task.stage1_config) {
                 buttons.push('<button class="btn btn-primary" onclick="showConfigStage1Modal()">配置第一階段</button>');
@@ -1157,6 +1163,73 @@
                 }
             } catch (error) {
                 alert('刪除失敗: ' + error);
+            }
+        }
+
+        async function resumeFailedTask() {
+            const task = tasks.find(t => t.task_id === selectedTaskId);
+            if (!task) {
+                alert('找不到任務');
+                return;
+            }
+
+            const stats = task.statistics || {};
+            const stage = task.stage;
+            const stageName = stage === 1 ? '第一階段 (CLIP 匹配)' : '第二階段 (OCR 識別)';
+            const pending = stage === 1 ? (stats.stage1_pending || 0) : (stats.stage2_pending || 0);
+            const completed = stage === 1 ? (stats.stage1_completed || 0) : (stats.stage2_completed || 0);
+            const failed = stage === 1 ? (stats.stage1_failed || 0) : (stats.stage2_failed || 0);
+
+            const message = `即將從失敗點繼續執行任務:\n\n` +
+                          `當前階段: ${stageName}\n` +
+                          `已完成: ${completed} 個檔案\n` +
+                          `已失敗: ${failed} 個檔案\n` +
+                          `待處理: ${pending} 個檔案\n\n` +
+                          `此操作將繼續處理剩餘的 ${pending} 個檔案,\n` +
+                          `已完成和已失敗的檔案不會重新處理。\n\n` +
+                          `確定要繼續嗎?`;
+
+            if (!confirm(message)) return;
+
+            try {
+                const response = await fetch(`/api/batch-tasks/${selectedTaskId}/resume`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✅ ${data.message}\n\n即將開始處理剩餘檔案...`);
+                    loadTasks();
+                } else {
+                    alert(`❌ 繼續執行失敗:\n${data.error}`);
+                    if (data.traceback) {
+                        console.error('錯誤追蹤:', data.traceback);
+                    }
+                }
+            } catch (error) {
+                alert('繼續執行失敗: ' + error);
+                console.error(error);
+            }
+        }
+
+        async function restartFromBeginning() {
+            const task = tasks.find(t => t.task_id === selectedTaskId);
+            if (!task) {
+                alert('找不到任務');
+                return;
+            }
+
+            const stage = task.stage;
+            const stageName = stage === 1 ? '第一階段' : '第二階段';
+
+            if (!confirm(`確定要從頭重新開始${stageName}嗎?\n\n⚠️ 警告: 這將清除該階段的所有結果!\n所有檔案都會重新處理。`)) {
+                return;
+            }
+
+            if (stage === 1) {
+                await restartStage1();
+            } else {
+                await restartStage2();
             }
         }
 

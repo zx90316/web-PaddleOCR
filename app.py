@@ -825,6 +825,48 @@ async def restart_stage2_processing(task_id: str):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.post("/api/batch-tasks/{task_id}/resume")
+async def resume_failed_task(task_id: str):
+    """
+    從失敗點繼續執行任務
+
+    此端點適用於任務中途失敗的情況,例如:
+    - 執行到 1200/3000 時因錯誤中斷
+    - 任務狀態變為 'failed'
+    - 調用此端點後,從第 1201 個檔案繼續執行
+    - 已完成和已失敗的檔案不會重新處理
+    """
+    try:
+        batch_processor.resume_task_from_failure(task_id, CLIP_SERVICE_URL)
+
+        # 取得任務資訊以返回詳細信息
+        task = batch_db.get_task_by_id(task_id)
+        stats = batch_db.get_task_statistics(task_id)
+
+        stage = task['stage']
+        if stage == 1:
+            pending = stats.get('stage1_pending', 0)
+            completed = stats.get('stage1_completed', 0)
+            message = f"任務已從第一階段繼續執行。已完成: {completed}, 待處理: {pending}"
+        else:
+            pending = stats.get('stage2_pending', 0)
+            completed = stats.get('stage2_completed', 0)
+            message = f"任務已從第二階段繼續執行。已完成: {completed}, 待處理: {pending}"
+
+        return {
+            "success": True,
+            "message": message,
+            "stage": stage,
+            "statistics": stats
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 @app.delete("/api/batch-tasks/{task_id}")
 async def delete_batch_task(task_id: str):
     """刪除批次任務"""

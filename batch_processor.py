@@ -492,3 +492,69 @@ def restart_task_stage2(task_id: str):
 
     # 重新啟動
     start_task_stage2(task_id)
+
+def resume_task_from_failure(task_id: str, clip_service_url: str = "http://localhost:8081"):
+    """
+    從失敗點繼續執行任務
+
+    此函數會:
+    1. 檢查任務當前的階段
+    2. 重置任務狀態為 'running'
+    3. 繼續處理 pending 狀態的檔案
+    4. 不會重新處理已完成或已失敗的檔案
+
+    使用場景:
+    - 任務執行到 1200/3000 時因錯誤中斷
+    - 狀態變為 'failed'
+    - 調用此函數後,從第 1201 個檔案繼續執行
+
+    Args:
+        task_id: 任務ID
+        clip_service_url: CLIP 服務 URL
+    """
+    # 獲取任務資訊
+    task = db.get_task_by_id(task_id)
+    if not task:
+        raise Exception("任務不存在")
+
+    # 檢查任務狀態
+    if task['status'] not in ['failed', 'stopped']:
+        raise Exception(f"只有失敗或已停止的任務才能繼續執行,當前狀態: {task['status']}")
+
+    # 檢查是否已在處理中
+    if task_id in processing_tasks:
+        raise Exception("任務已在處理中")
+
+    current_stage = task['stage']
+
+    print(f"任務 {task_id} 準備從第 {current_stage} 階段繼續執行")
+
+    # 取得統計資訊
+    stats = db.get_task_statistics(task_id)
+    if current_stage == 1:
+        pending_count = stats.get('stage1_pending', 0)
+        completed_count = stats.get('stage1_completed', 0)
+        failed_count = stats.get('stage1_failed', 0)
+        print(f"第一階段: 已完成 {completed_count}, 已失敗 {failed_count}, 待處理 {pending_count}")
+    elif current_stage == 2:
+        pending_count = stats.get('stage2_pending', 0)
+        completed_count = stats.get('stage2_completed', 0)
+        failed_count = stats.get('stage2_failed', 0)
+        print(f"第二階段: 已完成 {completed_count}, 已失敗 {failed_count}, 待處理 {pending_count}")
+
+    if pending_count == 0:
+        print(f"沒有待處理的檔案,任務已完成或所有檔案都已處理")
+        return
+
+    # 重置任務狀態
+    db.reset_task_status_for_resume(task_id, current_stage)
+
+    # 根據階段繼續執行
+    if current_stage == 1:
+        start_task_stage1(task_id, clip_service_url)
+        print(f"已從第一階段繼續執行,將處理剩餘的 {pending_count} 個檔案")
+    elif current_stage == 2:
+        start_task_stage2(task_id)
+        print(f"已從第二階段繼續執行,將處理剩餘的 {pending_count} 個檔案")
+    else:
+        raise Exception(f"無效的階段: {current_stage}")
