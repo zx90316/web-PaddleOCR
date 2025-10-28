@@ -91,7 +91,7 @@ async def process_file_stage1(file_info: Dict, task_config: Dict, clip_service_u
         處理結果
     """
     try:
-        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=600.0, trust_env=False) as client:
             # 準備文件
             files = []
 

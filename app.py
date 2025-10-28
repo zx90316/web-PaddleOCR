@@ -89,7 +89,7 @@ async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadF
     Returns:
         (matched_page_number, matched_page_image, matching_score, all_scores, voided_pages_checked)
     """
-    async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+    async with httpx.AsyncClient(timeout=600.0, trust_env=False) as client:
         # 準備文件
         files = []
 

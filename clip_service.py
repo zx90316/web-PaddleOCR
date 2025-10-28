@@ -119,7 +119,7 @@ async def check_page_voided(page_image: Image.Image) -> tuple[bool, dict]:
         img_byte_arr.seek(0)
 
         # 調用 PaddleOCR 服務進行 OCR
-        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=600.0, trust_env=False) as client:
             files = {
                 'file': ('page.png', img_byte_arr, 'image/png')
             }

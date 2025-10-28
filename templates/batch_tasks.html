@@ -646,6 +646,7 @@
         let isRestartMode = false; // 標記是否為重啟模式
         let refreshInterval = null;
         let isPageVisible = true; // 追蹤頁面可見性
+        let isRefreshing = false; // 追蹤是否有刷新請求正在進行中
 
         // 頁面加載時獲取任務列表
         document.addEventListener('DOMContentLoaded', function() {
@@ -689,7 +690,7 @@
             if (refreshInterval) {
                 clearInterval(refreshInterval);
             }
-            refreshInterval = setInterval(refreshRunningTasks, 5000);
+            refreshInterval = setInterval(refreshRunningTasks, 3000);
         }
 
         /**
@@ -743,8 +744,19 @@
             /**
              * 只刷新處理中(running)和暫停(paused)狀態的任務
              * 減少不必要的 API 調用,提升效能
+             * 防止重複請求:如果上一次刷新尚未完成,則跳過此次刷新
              */
+
+            // 檢查是否有請求正在進行中
+            if (isRefreshing) {
+                console.log('上一次刷新請求尚未完成,跳過此次刷新');
+                return;
+            }
+
             try {
+                // 標記開始刷新
+                isRefreshing = true;
+
                 // 找出需要刷新的任務(running 或 paused 狀態)
                 const tasksToRefresh = tasks.filter(task =>
                     task.status === 'running' || task.status === 'paused'
@@ -788,6 +800,9 @@
                 }
             } catch (error) {
                 console.error('刷新處理中任務失敗:', error);
+            } finally {
+                // 無論成功或失敗,都標記刷新完成
+                isRefreshing = false;
             }
         }
 
