@@ -1034,11 +1034,16 @@ async def export_task_to_excel(task_id: str):
         headers.extend(keywords)
         headers.extend(["處理時間", "錯誤訊息"])
 
+        # 初始化欄寬追蹤字典 (避免後續遍歷所有儲存格)
+        column_widths = {}
+
         for col_idx, header in enumerate(headers, start=1):
             cell = ws.cell(row=1, column=col_idx, value=header)
             cell.font = title_font
             cell.fill = title_fill
             cell.alignment = title_alignment
+            # 初始化欄寬為標題長度
+            column_widths[col_idx] = len(str(header))
 
         # 分批處理檔案資料,避免一次載入過多記憶體
         batch_size = 100
@@ -1046,12 +1051,13 @@ async def export_task_to_excel(task_id: str):
         row_idx = 2
 
         while True:
-            # 每次只載入 100 筆資料,並排除 Base64 圖片
+            # 每次只載入 100 筆資料,排除 Base64 圖片和 OCR 原始結果以提升效能
             files = batch_db.get_task_files(
                 task_id,
                 limit=batch_size,
                 offset=offset,
-                exclude_base64=True
+                exclude_base64=True,
+                exclude_ocr_result=True  # 匯出時不需要 OCR 原始結果,只需要提取的關鍵字
             )
 
             if not files:
@@ -1059,11 +1065,14 @@ async def export_task_to_excel(task_id: str):
 
             # 寫入這批資料
             for file_info in files:
-                ws.cell(row=row_idx, column=1, value=file_info['file_name'])
-                ws.cell(row=row_idx, column=2, value=file_info['file_path'])
-                ws.cell(row=row_idx, column=3, value=file_info['status'])
-                ws.cell(row=row_idx, column=4, value=file_info['matched_page_number'])
-                ws.cell(row=row_idx, column=5, value=file_info['matching_score'])
+                # 欄位值列表
+                values = [
+                    file_info['file_name'],
+                    file_info['file_path'],
+                    file_info['status'],
+                    file_info['matched_page_number'],
+                    file_info['matching_score']
+                ]
 
                 # 解析提取的關鍵字
                 extracted_keywords = {}
@@ -1073,15 +1082,21 @@ async def export_task_to_excel(task_id: str):
                     except:
                         pass
 
-                # 寫入關鍵字值
-                for kw_idx, keyword in enumerate(keywords):
-                    col_idx = 6 + kw_idx
-                    value = extracted_keywords.get(keyword, "")
-                    ws.cell(row=row_idx, column=col_idx, value=value)
+                # 添加關鍵字值
+                for keyword in keywords:
+                    values.append(extracted_keywords.get(keyword, ""))
 
-                # 處理時間和錯誤訊息
-                ws.cell(row=row_idx, column=6 + len(keywords), value=file_info['processed_at'])
-                ws.cell(row=row_idx, column=7 + len(keywords), value=file_info['error_message'])
+                # 添加處理時間和錯誤訊息
+                values.append(file_info['processed_at'])
+                values.append(file_info['error_message'])
+
+                # 寫入儲存格並同步更新欄寬
+                for col_idx, value in enumerate(values, start=1):
+                    ws.cell(row=row_idx, column=col_idx, value=value)
+                    # 同步追蹤最大欄寬
+                    value_length = len(str(value)) if value is not None else 0
+                    if value_length > column_widths.get(col_idx, 0):
+                        column_widths[col_idx] = value_length
 
                 row_idx += 1
 
@@ -1091,17 +1106,12 @@ async def export_task_to_excel(task_id: str):
             if len(files) < batch_size:
                 break
 
-        # 自動調整欄寬
-        for column in ws.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
+        # 套用欄寬 (一次性設定,避免遍歷所有儲存格)
+        from openpyxl.utils import get_column_letter
+        for col_idx, max_length in column_widths.items():
+            # 設定合理的欄寬範圍: 最小 10, 最大 50, 額外留 2 個字元空間
+            adjusted_width = min(max(max_length + 2, 10), 50)
+            column_letter = get_column_letter(col_idx)
             ws.column_dimensions[column_letter].width = adjusted_width
 
         # 保存到內存

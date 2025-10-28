@@ -129,6 +129,12 @@ def init_database():
     cursor.execute('''CREATE INDEX IF NOT EXISTS idx_batch_files_stats_covering
                       ON batch_files(task_id, stage1_status, stage2_status, matching_score)''')
 
+    # 匯出專用覆蓋索引 - 包含匯出 Excel 所需的所有欄位,大幅提升匯出效能
+    # 注意: SQLite 覆蓋索引有欄位數量限制,這裡只包含最關鍵的欄位
+    cursor.execute('''CREATE INDEX IF NOT EXISTS idx_batch_files_export_covering
+                      ON batch_files(task_id, id, file_name, file_path, status,
+                                     matched_page_number, matching_score, processed_at)''')
+
     conn.commit()
 
     print("批次任務資料庫初始化完成")
@@ -330,7 +336,8 @@ def get_task_files(task_id: str, status: Optional[str] = None,
                    stage2_status: Optional[str] = None,
                    limit: Optional[int] = None,
                    offset: int = 0,
-                   exclude_base64: bool = True) -> List[Dict]:
+                   exclude_base64: bool = True,
+                   exclude_ocr_result: bool = False) -> List[Dict]:
     """
     取得任務的檔案列表
 
@@ -342,12 +349,20 @@ def get_task_files(task_id: str, status: Optional[str] = None,
         limit: 限制數量
         offset: 偏移量
         exclude_base64: 是否排除 Base64 圖片資料(預設True以節省記憶體)
+        exclude_ocr_result: 是否排除 OCR 原始結果(預設False,匯出時建議設為True)
     """
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 選擇性排除 Base64 欄位以節省記憶體
-    if exclude_base64:
+    # 選擇性排除大型欄位以提升查詢效能
+    if exclude_base64 and exclude_ocr_result:
+        # 匯出專用:只取匯出需要的欄位,效能最佳
+        query = '''SELECT id, task_id, file_path, file_name, file_size, file_type,
+                   status, stage1_status, stage2_status,
+                   matched_page_number, matching_score,
+                   extracted_keywords, error_message, processed_at
+                   FROM batch_files WHERE task_id = ?'''
+    elif exclude_base64:
         query = '''SELECT id, task_id, file_path, file_name, file_size, file_type,
                    status, stage1_status, stage2_status, stage1_result, stage2_result,
                    matched_page_number, NULL as matched_page_base64, matching_score,
