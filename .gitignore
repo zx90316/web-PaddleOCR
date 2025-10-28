@@ -7,3 +7,5 @@ ocr_tasks.db
 official_models
 temp_ocr
 batch_tasks.db
+batch_tasks.db-shm
+batch_tasks.db-wal
