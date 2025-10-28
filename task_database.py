@@ -6,9 +6,12 @@
 
 import sqlite3
 import json
+import os
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import threading
+from dotenv import load_dotenv
+load_dotenv()
 
 # 線程安全的資料庫連接
 _local = threading.local()
@@ -24,7 +27,7 @@ def get_connection():
     """
     if not hasattr(_local, 'conn'):
         _local.conn = sqlite3.connect(
-            'batch_tasks.db',
+            os.getenv("batch_tasks_DB_path") + 'batch_tasks.db',
             check_same_thread=False,
             timeout=30.0  # 增加 timeout 到 30 秒避免鎖定錯誤
         )
@@ -128,12 +131,6 @@ def init_database():
     # 覆蓋索引優化 - 包含統計所需的欄位,避免回表查詢
     cursor.execute('''CREATE INDEX IF NOT EXISTS idx_batch_files_stats_covering
                       ON batch_files(task_id, stage1_status, stage2_status, matching_score)''')
-
-    # 匯出專用覆蓋索引 - 包含匯出 Excel 所需的所有欄位,大幅提升匯出效能
-    # 注意: SQLite 覆蓋索引有欄位數量限制,這裡只包含最關鍵的欄位
-    cursor.execute('''CREATE INDEX IF NOT EXISTS idx_batch_files_export_covering
-                      ON batch_files(task_id, id, file_name, file_path, status,
-                                     matched_page_number, matching_score, processed_at)''')
 
     conn.commit()
 
