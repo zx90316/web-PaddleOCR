@@ -24,7 +24,11 @@ def get_connection():
     """
     if not hasattr(_local, 'conn'):
         _local.conn = sqlite3.connect(
+<<<<<<< HEAD
             'V:\\行政服務部\\協同作業\\資訊\\內部\\99.其它\\batch_tasks.db',
+=======
+            'batch_tasks.db',
+>>>>>>> bcf65d000bb021e40a78ab43cc2c1cbfbc26a120
             check_same_thread=False,
             timeout=30.0  # 增加 timeout 到 30 秒避免鎖定錯誤
         )
