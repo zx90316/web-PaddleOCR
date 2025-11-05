@@ -15,6 +15,8 @@ if sys.platform == "win32":
     sys.stderr = codecs.getwriter("utf-8")(sys.stderr.buffer, 'strict')
 
 BASE_URL = "http://localhost:8080"
+# 請求超時時間（秒）
+REQUEST_TIMEOUT = 30
 
 def test_api_endpoints(task_id):
     """測試所有新增的 API 端點"""
@@ -25,7 +27,7 @@ def test_api_endpoints(task_id):
     # 測試 1: 取得任務預覽
     print("\n[測試 1] 取得任務預覽")
     try:
-        response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/preview?limit=5")
+        response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/preview?limit=5", timeout=REQUEST_TIMEOUT)
         data = response.json()
 
         if data.get('success'):
@@ -44,7 +46,7 @@ def test_api_endpoints(task_id):
                 test_file_id = files[0]['id']
                 print(f"\n[測試 2] 取得檔案詳情 (ID: {test_file_id})")
 
-                response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/files/{test_file_id}")
+                response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/files/{test_file_id}", timeout=REQUEST_TIMEOUT)
                 data = response.json()
 
                 if data.get('success'):
@@ -67,7 +69,7 @@ def test_api_endpoints(task_id):
                 # 測試取得圖片
                 print(f"\n[測試 3] 取得匹配頁面圖片 (ID: {test_file_id})")
 
-                response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/files/{test_file_id}/image")
+                response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/files/{test_file_id}/image", timeout=REQUEST_TIMEOUT)
 
                 if response.status_code == 200:
                     print(f"✅ 成功取得圖片")
@@ -97,7 +99,7 @@ def test_api_endpoints(task_id):
     # 測試 4: 取得所有檔案列表
     print(f"\n[測試 4] 取得所有檔案列表")
     try:
-        response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/files?limit=10")
+        response = requests.get(f"{BASE_URL}/api/batch-tasks/{task_id}/files?limit=10", timeout=REQUEST_TIMEOUT)
         data = response.json()
 
         if data.get('success'):
@@ -144,7 +146,7 @@ def list_tasks():
     print("=" * 60)
 
     try:
-        response = requests.get(f"{BASE_URL}/api/batch-tasks")
+        response = requests.get(f"{BASE_URL}/api/batch-tasks", timeout=REQUEST_TIMEOUT)
         data = response.json()
 
         if data.get('success'):

@@ -3,13 +3,17 @@
 """
 生成測試資料
 創建多個包含目標頁面的多頁 PDF 文件，分布在多個子資料夾中
+
+安全說明:
+此腳本用於生成測試數據，使用 random 模組生成隨機內容（文字、顏色、線條等）。
+random 模組不用於任何安全目的（如密碼生成、令牌生成等），因此使用是安全的。
 """
 
 import os
 import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
-import random
+import random  # nosec B311 - 僅用於測試數據生成，非安全目的
 
 # 設定輸出編碼為 UTF-8
 if sys.platform == "win32":
@@ -56,8 +60,8 @@ def create_test_page(text, page_number, color='white'):
 
     # 添加一些隨機線條使頁面看起來不同
     for _ in range(3):
-        x1, y1 = random.randint(0, width), random.randint(0, height)
-        x2, y2 = random.randint(0, width), random.randint(0, height)
+        x1, y1 = random.randint(0, width), random.randint(0, height)  # nosec B311
+        x2, y2 = random.randint(0, width), random.randint(0, height)  # nosec B311
         draw.line([(x1, y1), (x2, y2)], fill='lightgray', width=2)
 
     return img
@@ -86,8 +90,8 @@ def create_multi_page_pdf(output_path, target_page_img, target_page_position, to
                 "Test Data Page",
                 "Filler Page"
             ]
-            text = random.choice(page_texts)
-            color = random.choice(['white', 'lightblue', 'lightyellow', 'lightgreen'])
+            text = random.choice(page_texts)  # nosec B311
+            color = random.choice(['white', 'lightblue', 'lightyellow', 'lightgreen'])  # nosec B311
             page = create_test_page(text, i, color)
             pages.append(page)
 
@@ -141,7 +145,7 @@ def generate_test_data():
         folder_path.mkdir(parents=True, exist_ok=True)
 
         # 在每個資料夾中生成 2-4 個 PDF
-        num_pdfs = random.randint(2, 4)
+        num_pdfs = random.randint(2, 4)  # nosec B311
 
         for i in range(num_pdfs):
             pdf_count += 1
@@ -149,8 +153,8 @@ def generate_test_data():
             pdf_path = folder_path / pdf_name
 
             # 隨機選擇 PDF 的頁數和目標頁位置
-            total_pages = random.randint(5, 15)
-            target_position = random.randint(1, total_pages)
+            total_pages = random.randint(5, 15)  # nosec B311
+            target_position = random.randint(1, total_pages)  # nosec B311
 
             create_multi_page_pdf(
                 str(pdf_path),
@@ -222,8 +226,8 @@ def create_target_page_with_keywords(base_dir):
         pdf_name = f"special_doc_{i+1}.pdf"
         pdf_path = special_folder / pdf_name
 
-        total_pages = random.randint(8, 12)
-        target_position = random.randint(2, total_pages - 1)
+        total_pages = random.randint(8, 12)  # nosec B311
+        target_position = random.randint(2, total_pages - 1)  # nosec B311
 
         create_multi_page_pdf(
             str(pdf_path),

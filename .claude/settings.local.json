@@ -3,7 +3,11 @@
     "allow": [
       "Bash(python:*)",
       "Bash(pip install:*)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(\"C:\\Users\\VSCC\\Desktop\\web-PaddleOCR\\venv_paddle\\Scripts\\python.exe\" security_check.py)",
+      "Bash(findstr:*)",
+      "Bash(\"C:\\Users\\VSCC\\Desktop\\web-PaddleOCR\\venv_paddle\\Scripts\\python.exe\":*)",
+      "Bash(\"C:\\Users\\VSCC\\Desktop\\web-PaddleOCR\\venv_paddle\\Scripts\\python.exe\" -m bandit -r . -f json -o security_reports/final_check.json --exclude ./venv_*,./official_models,./output,./logs,./temp_ocr,./.git -q)"
     ],
     "deny": [],
     "ask": []

@@ -3,9 +3,13 @@
 """
 啟動 PaddleOCR 雙服務架構
 同時啟動 CLIP 服務和 PaddleOCR 服務
+
+安全說明:
+此腳本用於啟動本地服務，subprocess 調用僅執行本地Python腳本（clip_service.py, app.py）
+不接受外部輸入，因此是安全的。
 """
 
-import subprocess
+import subprocess  # nosec B404 - 服務啟動腳本，需要調用subprocess啟動Python服務
 import sys
 import os
 import time
@@ -72,13 +76,15 @@ def main():
 
     if sys.platform == "win32":
         # Windows: 在新視窗中啟動
-        clip_process = subprocess.Popen(
+        # 執行本地Python腳本（clip_service.py），路徑由腳本控制
+        clip_process = subprocess.Popen(  # nosec B603
             [clip_python, "clip_service.py"],
             creationflags=subprocess.CREATE_NEW_CONSOLE
         )
     else:
         # Linux/Mac: 在背景執行
-        clip_process = subprocess.Popen(
+        # 執行本地Python腳本（clip_service.py），路徑由腳本控制
+        clip_process = subprocess.Popen(  # nosec B603
             [clip_python, "clip_service.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -98,13 +104,15 @@ def main():
 
     if sys.platform == "win32":
         # Windows: 在新視窗中啟動
-        paddle_process = subprocess.Popen(
+        # 執行本地Python腳本（app.py），路徑由腳本控制
+        paddle_process = subprocess.Popen(  # nosec B603
             [paddle_python, "app.py"],
             creationflags=subprocess.CREATE_NEW_CONSOLE
         )
     else:
         # Linux/Mac: 在背景執行
-        paddle_process = subprocess.Popen(
+        # 執行本地Python腳本（app.py），路徑由腳本控制
+        paddle_process = subprocess.Popen(  # nosec B603
             [paddle_python, "app.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -151,13 +159,15 @@ def main():
         try:
             clip_process.terminate()
             print("CLIP 服務已停止")
-        except:
+        except (OSError, AttributeError):  # nosec B110
+            # 進程可能已經停止或不存在
             pass
 
         try:
             paddle_process.terminate()
             print("PaddleOCR 服務已停止")
-        except:
+        except (OSError, AttributeError):  # nosec B110
+            # 進程可能已經停止或不存在
             pass
 
         print("\n服務已全部停止")

@@ -947,13 +947,15 @@ async def get_file_detail(task_id: str, file_id: int):
         if file_info['ocr_result']:
             try:
                 file_info['ocr_result'] = json.loads(file_info['ocr_result'])
-            except:
+            except (json.JSONDecodeError, TypeError, ValueError):  # nosec B110
+                # 如果無法解析 JSON，保持原始字符串值
                 pass
 
         if file_info['extracted_keywords']:
             try:
                 file_info['extracted_keywords'] = json.loads(file_info['extracted_keywords'])
-            except:
+            except (json.JSONDecodeError, TypeError, ValueError):  # nosec B110
+                # 如果無法解析 JSON，保持原始字符串值
                 pass
 
         return {"success": True, "file": file_info}
@@ -1137,7 +1139,8 @@ async def export_task_to_excel(task_id: str):
                 if file_info['extracted_keywords']:
                     try:
                         extracted_keywords = json.loads(file_info['extracted_keywords'])
-                    except:
+                    except (json.JSONDecodeError, TypeError, ValueError):  # nosec B110
+                        # 如果無法解析 JSON，保持空字典
                         pass
 
                 # 添加關鍵字值
@@ -1197,7 +1200,21 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # 從環境變量讀取配置，默認只綁定 localhost
+    # 生產環境若需要對外訪問，請設置環境變量 APP_HOST=0.0.0.0
+    host = os.getenv("APP_HOST", "127.0.0.1")
+    port = int(os.getenv("APP_PORT", "8080"))
+
     print("🚀 啟動 PaddleOCR 網站服務...")
-    print("🌐 請訪問: http://localhost:8080")
-    print("🛠️ 管理後台: http://localhost:8080/admin")
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    print(f"🌐 服務地址: http://{host}:{port}")
+    print(f"🌐 本機訪問: http://localhost:{port}")
+    print(f"🛠️ 管理後台: http://localhost:{port}/admin")
+
+    # nosec B104: 從環境變量讀取 host，默認為安全的 127.0.0.1
+    # 只有明確設置環境變量才會綁定到所有接口，並會顯示警告
+    if host == "0.0.0.0":  # nosec B104
+        print("⚠️  警告: 服務綁定到所有網絡接口 (0.0.0.0)，請確保已設置適當的防火牆規則")
+
+    uvicorn.run(app, host=host, port=port)

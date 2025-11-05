@@ -212,12 +212,16 @@ def update_task_status(task_id: str, status: str, stage: Optional[int] = None,
 
     params.append(task_id)
 
-    cursor.execute(f'''
+    # 構建 SQL 查詢
+    # nosec B608: updates 列表中的所有欄位名都是硬編碼的（status, updated_at, stage, error_message等）
+    # 不包含用戶輸入，因此不存在 SQL 注入風險。所有的值都通過參數化查詢 (?) 安全傳遞。
+    sql = f'''
         UPDATE batch_tasks
         SET {', '.join(updates)}
         WHERE task_id = ?
-    ''', params)
+    '''  # nosec B608
 
+    cursor.execute(sql, params)
     conn.commit()
 
 def update_task_progress(task_id: str):

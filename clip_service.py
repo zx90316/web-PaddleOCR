@@ -35,8 +35,19 @@ def get_clip_model():
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"偵測到設備: {device}。準備載入 CLIP 模型...")
         print("載入 CLIP 模型...")
-        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
-        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
+
+        # 使用 local_files_only=True 確保只從本地緩存加載，不會從網絡下載
+        # 這已經滿足安全要求，因為不會下載任意版本的模型
+        clip_model = CLIPModel.from_pretrained(
+            "openai/clip-vit-base-patch32",
+            local_files_only=True,
+            # 如果需要固定版本，可以指定 revision
+            # revision="specific_commit_hash"
+        )  # nosec B615 - 使用 local_files_only=True，不會從網絡下載
+        clip_processor = CLIPProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32",
+            local_files_only=True
+        )  # nosec B615 - 使用 local_files_only=True，不會從網絡下載
 
         clip_model.to(device)
         print("CLIP 模型載入完成")
@@ -425,6 +436,20 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # 從環境變量讀取配置，默認只綁定 localhost
+    # 生產環境若需要對外訪問，請設置環境變量 CLIP_HOST=0.0.0.0
+    host = os.getenv("CLIP_HOST", "127.0.0.1")
+    port = int(os.getenv("CLIP_PORT", "8081"))
+
     print("🚀 啟動 CLIP 圖像匹配服務...")
-    print("🌐 請訪問: http://localhost:8081")
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    print(f"🌐 服務地址: http://{host}:{port}")
+    print(f"🌐 本機訪問: http://localhost:{port}")
+
+    # nosec B104: 從環境變量讀取 host，默認為安全的 127.0.0.1
+    # 只有明確設置環境變量才會綁定到所有接口，並會顯示警告
+    if host == "0.0.0.0":  # nosec B104
+        print("⚠️  警告: 服務綁定到所有網絡接口 (0.0.0.0)，請確保已設置適當的防火牆規則")
+
+    uvicorn.run(app, host=host, port=port)
