@@ -9,3 +9,6 @@ temp_ocr
 batch_tasks.db
 batch_tasks.db-shm
 batch_tasks.db-wal
+.bandit
+security_reports
+WI-GA215：01(3.0)系統開發及維護申請表 (1).docx

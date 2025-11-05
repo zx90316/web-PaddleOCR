@@ -36,6 +36,43 @@ import base64
 import task_database as batch_db
 import batch_processor
 from urllib.parse import quote
+import logging
+from logging.handlers import RotatingFileHandler
+
+# ==================== 日誌配置 ====================
+# 建立 logs 目錄
+os.makedirs("logs", exist_ok=True)
+
+# 配置應用程式日誌
+logger = logging.getLogger("paddleocr_app")
+logger.setLevel(logging.INFO)
+
+# 檔案處理器 - 使用輪替機制 (每個檔案 10MB, 保留 10 個備份)
+file_handler = RotatingFileHandler(
+    "logs/app.log",
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=10,
+    encoding='utf-8'
+)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+logger.addHandler(file_handler)
+
+# 主控台處理器
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+logger.addHandler(console_handler)
+
+logger.info("=" * 60)
+logger.info("PaddleOCR 應用程式日誌系統已初始化")
+logger.info("=" * 60)
+
+# ==================== FastAPI 應用程式初始化 ====================
 
 # 初始化 FastAPI 應用程式
 app = FastAPI(title="PaddleOCR 圖片識別服務", description="上傳圖片並提取指定的關鍵字")
@@ -242,25 +279,33 @@ async def process_ocr(
     task_id = str(uuid.uuid4())
     task_output_dir = os.path.join(output_dir, task_id)
 
+    logger.info(f"收到 OCR 請求 - 任務ID: {task_id}, 檔案名稱: {file.filename}, 檔案類型: {file.content_type}")
+
     try:
         # 檢查檔案類型
         if not (file.content_type.startswith('image/') or file.content_type == 'application/pdf'):
+            logger.warning(f"無效的檔案類型: {file.content_type} - 任務ID: {task_id}")
             raise HTTPException(status_code=400, detail="請上傳有效的圖片檔案或PDF檔案")
 
         # 解析關鍵字列表
         try:
             key_list_parsed = json.loads(key_list)
-        except json.JSONDecodeError:
+            logger.info(f"解析關鍵字列表成功 - 任務ID: {task_id}, 關鍵字數量: {len(key_list_parsed)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"關鍵字列表解析失敗 - 任務ID: {task_id}, 錯誤: {str(e)}")
             raise HTTPException(status_code=400, detail="關鍵字列表格式錯誤")
 
         # 創建任務專屬輸出目錄
         os.makedirs(task_output_dir, exist_ok=True)
+        logger.debug(f"創建輸出目錄 - 任務ID: {task_id}, 路徑: {task_output_dir}")
 
         # 創建臨時檔案
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
             content = await file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
+
+        logger.info(f"開始 OCR 處理 - 任務ID: {task_id}, 檔案大小: {len(content)} bytes")
 
         # 調用核心 OCR 處理函數
         response_data = perform_ocr_on_file(
@@ -298,12 +343,15 @@ async def process_ocr(
             settings=response_data["settings"]
         )
 
+        logger.info(f"OCR 處理完成 - 任務ID: {task_id}, 檔案名稱: {file.filename}, 輸出圖片數量: {len(response_data['output_images'])}")
         return OCRResponse(success=True, data=response_data)
 
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(f"HTTP異常 - 任務ID: {task_id}, 狀態碼: {he.status_code}, 詳情: {he.detail}")
         raise
     except Exception as e:
         # 如果發生錯誤，清理輸出目錄
+        logger.error(f"OCR 處理失敗 - 任務ID: {task_id}, 錯誤: {str(e)}", exc_info=True)
         if os.path.exists(task_output_dir):
             shutil.rmtree(task_output_dir)
         return OCRResponse(success=False, error=f"處理過程中發生錯誤: {str(e)}")
@@ -311,6 +359,7 @@ async def process_ocr(
         # 清理臨時檔案
         if temp_file_path and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+            logger.debug(f"清理臨時檔案 - 任務ID: {task_id}")
 
 @app.post("/ocr-with-matching", response_model=OCRResponse)
 async def process_ocr_with_matching(
@@ -554,26 +603,34 @@ async def create_batch_task(
     source_path: str = Form(...)
 ):
     """創建新的批次任務並掃描檔案"""
+    logger.info(f"收到批次任務創建請求 - 任務名稱: {task_name}, 來源路徑: {source_path}")
+
     try:
         # 驗證路徑
         if not os.path.exists(source_path):
+            logger.warning(f"批次任務創建失敗 - 路徑不存在: {source_path}")
             return {"success": False, "error": "指定的路徑不存在"}
 
         if not os.path.isdir(source_path):
+            logger.warning(f"批次任務創建失敗 - 路徑不是目錄: {source_path}")
             return {"success": False, "error": "指定的路徑不是目錄"}
 
         # 創建任務
         task_id = str(uuid.uuid4())
         batch_db.create_batch_task(task_id, task_name, source_path)
+        logger.info(f"批次任務已創建 - 任務ID: {task_id}, 任務名稱: {task_name}")
 
         # 掃描檔案
         files = batch_processor.scan_directory(source_path)
+        logger.info(f"掃描目錄完成 - 任務ID: {task_id}, 找到 {len(files)} 個 PDF 檔案")
 
         if not files:
+            logger.warning(f"批次任務創建失敗 - 未找到 PDF 檔案, 任務ID: {task_id}")
             return {"success": False, "error": "未找到任何 PDF 檔案"}
 
         # 添加檔案到任務
         batch_db.add_files_to_task(task_id, files)
+        logger.info(f"批次任務創建成功 - 任務ID: {task_id}, 檔案數量: {len(files)}")
 
         return {
             "success": True,
@@ -584,6 +641,7 @@ async def create_batch_task(
 
     except Exception as e:
         import traceback
+        logger.error(f"批次任務創建失敗 - 任務名稱: {task_name}, 錯誤: {str(e)}", exc_info=True)
         return {"success": False, "error": f"創建任務失敗: {str(e)}\n{traceback.format_exc()}"}
 
 @app.get("/api/batch-tasks")
