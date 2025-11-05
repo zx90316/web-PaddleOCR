@@ -1,14 +1,114 @@
+# ==================== Python ====================
+# 虛擬環境
 /venv*
+/.venv
+/env
+/.env
+
+# Python 編譯檔案
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ==================== 應用程式相關 ====================
+# 輸出目錄
 /output
-/PP-OCRv5_server_det.py
-/__pycache__
-files
+/temp_ocr
+/files
+
+# 資料庫檔案
+*.db
+*.db-shm
+*.db-wal
 ocr_tasks.db
-official_models
-temp_ocr
 batch_tasks.db
-batch_tasks.db-shm
-batch_tasks.db-wal
+
+# 日誌檔案
+/logs
+*.log
+
+# 模型檔案 (大型二進位檔案)
+/official_models
+
+# ==================== 安全與測試 ====================
+# 安全掃描報告
+/security_reports
+bandit-report.*
+pip-audit-report.*
+
+# 備份檔案
+requirements_backup_*.txt
+
+# 監控與清理配置
+log_monitor_config.json
+data_retention_policy.json
+/ssl_certificates
+
+# ==================== 敏感檔案 ====================
+# 環境變數與配置
+.env
+.env.local
+.env.*.local
+config.ini
+secrets.yaml
+credentials.json
+
+# 私鑰與憑證
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ==================== 文件與報告 ====================
+# Word/Excel 暫存檔
+~$*.doc*
+~$*.xls*
+*.tmp
+
+# 系統開發申請表 (內部文件)
+WI-GA215*.docx
+WI-GA215*.xlsx
+SSDLC檢核表*.xlsx
+
+# ==================== IDE 與編輯器 ====================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# ==================== 作業系統 ====================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+
+# ==================== 其他 ====================
+# 測試覆蓋率
+.coverage
+htmlcov/
+.pytest_cache/
+
+# 分發檔案
+build/
+dist/
+*.egg-info/
 .bandit
-security_reports
-WI-GA215：01(3.0)系統開發及維護申請表 (1).docx

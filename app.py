@@ -1198,6 +1198,92 @@ async def health_check():
     """健康檢查端點"""
     return {"status": "healthy", "message": "PaddleOCR 服務運行正常"}
 
+@app.get("/health/logs")
+async def log_health_check():
+    """日誌健康檢查端點"""
+    try:
+        from log_monitor import LogMonitor
+
+        monitor = LogMonitor()
+        result = monitor.check_log_health()
+        summary = monitor.get_status_summary()
+
+        return {
+            "success": True,
+            "health_check": result,
+            "summary": summary
+        }
+    except Exception as e:
+        logger.error(f"日誌健康檢查失敗: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/admin/cleanup")
+async def trigger_data_cleanup(dry_run: bool = False):
+    """觸發資料清理作業"""
+    try:
+        from data_retention import DataCleanupManager
+
+        logger.info(f"收到資料清理請求 (dry_run={dry_run})")
+        manager = DataCleanupManager(dry_run=dry_run)
+        result = manager.cleanup_all()
+
+        logger.info(f"資料清理完成: 刪除 {result['summary']['total_deleted']} 項, 釋放 {result['summary']['total_freed_mb']:.2f} MB")
+
+        return {
+            "success": True,
+            "result": result
+        }
+    except Exception as e:
+        logger.error(f"資料清理失敗: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.get("/admin/retention-policy")
+async def get_retention_policy():
+    """取得資料保存政策"""
+    try:
+        from data_retention import RetentionPolicy
+
+        policy = RetentionPolicy()
+        return {
+            "success": True,
+            "policies": policy.policies
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/admin/retention-policy")
+async def update_retention_policy(policies: dict):
+    """更新資料保存政策"""
+    try:
+        from data_retention import RetentionPolicy
+
+        policy = RetentionPolicy()
+        for category, days in policies.items():
+            policy.set_retention_days(category, int(days))
+        policy.save_policies()
+
+        logger.info(f"資料保存政策已更新: {policies}")
+
+        return {
+            "success": True,
+            "message": "保存政策已更新"
+        }
+    except Exception as e:
+        logger.error(f"更新保存政策失敗: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 if __name__ == "__main__":
     import uvicorn
     import os
