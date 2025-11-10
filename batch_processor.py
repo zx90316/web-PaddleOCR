@@ -191,10 +191,36 @@ def process_file_stage2(file_info: Dict, matched_page_base64: str, task_config: 
             # 執行 LLM 提取關鍵字
             extracted_keywords = {}
             if task_config.get('use_llm', True) and keywords:
-                chat_result = pipeline.chat(
-                    key_list=keywords,
-                    visual_info=visual_info_list
-                )
+                use_mllm = task_config.get('use_mllm', False)
+                
+                if use_mllm:
+                    try:
+                        # 使用 MLLM 進行多模態預測
+                        mllm_predict_res = pipeline.mllm_pred(
+                            input=str(temp_image_path),
+                            key_list=keywords,
+                        )
+                        mllm_predict_info = mllm_predict_res["mllm_res"]
+                        
+                        chat_result = pipeline.chat(
+                            key_list=keywords,
+                            visual_info=visual_info_list,
+                            mllm_predict_info=mllm_predict_info,
+                        )
+                    except Exception as e:
+                        # MLLM 失敗時退回標準 LLM
+                        print(f"MLLM 處理失敗，退回標準 LLM: {str(e)}")
+                        chat_result = pipeline.chat(
+                            key_list=keywords,
+                            visual_info=visual_info_list
+                        )
+                else:
+                    # 使用標準 LLM
+                    chat_result = pipeline.chat(
+                        key_list=keywords,
+                        visual_info=visual_info_list
+                    )
+                
                 extracted_keywords = chat_result.get("chat_res", {})
 
             return {

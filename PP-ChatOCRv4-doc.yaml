@@ -22,8 +22,8 @@ SubModules:
 
   MLLM_Chat:
     module_name: chat_bot
-    model_name: gemma3:4b
-    base_url: "http://localhost:11434/v1"
+    model_name: PP-DocBee2-3B
+    base_url: "http://localhost:8080/"
     api_type: openai
     api_key: "sk-123456789"
 

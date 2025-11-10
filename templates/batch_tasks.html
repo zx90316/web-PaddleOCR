@@ -629,7 +629,8 @@
                     <label><input type="checkbox" name="use_textline_orientation"> 文字行方向檢測</label><br>
                     <label><input type="checkbox" name="use_seal_recognition"> 印章識別</label><br>
                     <label><input type="checkbox" name="use_table_recognition" checked> 表格識別</label><br>
-                    <label><input type="checkbox" name="use_llm" checked> 使用 LLM 提取關鍵字</label>
+                    <label><input type="checkbox" name="use_llm" checked> 使用 LLM 提取關鍵字</label><br>
+                    <label><input type="checkbox" name="use_mllm"> 使用多模態大模型（MLLM）</label>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('configStage2Modal')">取消</button>
@@ -1249,6 +1250,7 @@
 
                     // 填充表單
                     document.getElementById('useLLM').checked = config.use_llm !== false;
+                    document.querySelector('[name="use_mllm"]').checked = config.use_mllm || false;
                     document.getElementById('useOrientation').checked = config.use_doc_orientation_classify || false;
                     document.getElementById('useUnwarping').checked = config.use_doc_unwarping || false;
                     document.getElementById('useTextlineOrientation').checked = config.use_textline_orientation || false;

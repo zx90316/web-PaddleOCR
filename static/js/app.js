@@ -246,6 +246,7 @@ async function handleStandardSubmit() {
     const useSealRecognition = document.getElementById('useSealRecognition').checked;
     const useTableRecognition = document.getElementById('useTableRecognition').checked;
     const useLLM = document.getElementById('useLLM').checked;
+    const useMLLM = document.getElementById('useMLLM').checked;
 
     // 驗證輸入
     if (!fileInput.files[0]) {
@@ -272,6 +273,7 @@ async function handleStandardSubmit() {
     formData.append('use_seal_recognition', useSealRecognition);
     formData.append('use_table_recognition', useTableRecognition);
     formData.append('use_llm', useLLM);
+    formData.append('use_mllm', useMLLM);
 
     // 更新UI狀態
     const submitButton = document.querySelector('button[type="submit"]');
@@ -323,6 +325,7 @@ async function handleMatchingSubmit() {
     const useSealRecognition = document.getElementById('useSealRecognition').checked;
     const useTableRecognition = document.getElementById('useTableRecognition').checked;
     const useLLM = document.getElementById('useLLM').checked;
+    const useMLLM = document.getElementById('useMLLM').checked;
     const positiveThreshold = document.getElementById('positiveThreshold').value;
     const negativeThreshold = document.getElementById('negativeThreshold').value;
     const skipVoided = document.getElementById('skipVoided').checked;
@@ -368,6 +371,7 @@ async function handleMatchingSubmit() {
     formData.append('use_seal_recognition', useSealRecognition);
     formData.append('use_table_recognition', useTableRecognition);
     formData.append('use_llm', useLLM);
+    formData.append('use_mllm', useMLLM);
     formData.append('positive_threshold', positiveThreshold);
     formData.append('negative_threshold', negativeThreshold);
     formData.append('skip_voided', skipVoided);
@@ -496,6 +500,7 @@ function createMatchingSuccessHTML(data) {
                 <p><strong>反例相似度閾值：</strong> ${data.settings.negative_threshold}</p>
                 ${data.settings.skip_voided ? `<p><strong>跳過廢止頁面：</strong> 已啟用 (檢查前 ${data.settings.top_n_for_void_check} 個候選)</p>` : ''}
                 <p><strong>使用大模型提取結果：</strong> ${data.settings.use_llm ? '已啟用' : '未啟用'}</p>
+                <p><strong>使用多模態大模型：</strong> ${data.settings.use_mllm ? '已啟用' : '未啟用'}</p>
                 <p><strong>文檔方向分類：</strong> ${data.settings.use_doc_orientation_classify ? '已啟用' : '未啟用'}</p>
                 <p><strong>文檔去彎曲：</strong> ${data.settings.use_doc_unwarping ? '已啟用' : '未啟用'}</p>
                 <p><strong>文本行方向分類：</strong> ${data.settings.use_textline_orientation ? '已啟用' : '未啟用'}</p>
@@ -565,6 +570,7 @@ function createSuccessHTML(data) {
                 <p><strong>原始檔案：</strong> ${data.original_filename || 'N/A'}</p>
                 <p><strong>查詢的關鍵字：</strong> ${data.key_list.join(', ')}</p>
                 <p><strong>使用大模型提取結果：</strong> ${data.settings.use_llm ? '已啟用' : '未啟用'}</p>
+                <p><strong>使用多模態大模型：</strong> ${data.settings.use_mllm ? '已啟用' : '未啟用'}</p>
                 <p><strong>文檔方向分類：</strong> ${data.settings.use_doc_orientation_classify ? '已啟用' : '未啟用'}</p>
                 <p><strong>文檔去彎曲：</strong> ${data.settings.use_doc_unwarping ? '已啟用' : '未啟用'}</p>
                 <p><strong>文本行方向分類：</strong> ${data.settings.use_textline_orientation ? '已啟用' : '未啟用'}</p>
