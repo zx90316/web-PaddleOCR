@@ -100,6 +100,37 @@ pipeline = create_pipeline(
 # CLIP 服務配置
 CLIP_SERVICE_URL = os.getenv("CLIP_SERVICE_URL", "http://192.168.80.24:8081")
 
+# MLLM 服務配置
+MLLM_SERVICE_URL = os.getenv("MLLM_SERVICE_URL", "http://localhost:8080")
+
+async def check_mllm_health() -> bool:
+    """
+    檢查多模態大模型服務是否運行中
+    Returns:
+        bool: True 表示服務正常，False 表示服務不可用
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{MLLM_SERVICE_URL}/health")
+            if response.status_code == 200:
+                data = response.json()
+                # 檢查 errorCode 是否為 0 表示健康
+                if data.get("errorCode") == 0:
+                    logger.info(f"MLLM 服務健康檢查通過: {data.get('errorMsg', 'Healthy')}")
+                    return True
+                else:
+                    logger.warning(f"MLLM 服務回應異常: errorCode={data.get('errorCode')}, errorMsg={data.get('errorMsg')}")
+                    return False
+            else:
+                logger.warning(f"MLLM 服務健康檢查失敗: HTTP {response.status_code}")
+                return False
+    except httpx.TimeoutException:
+        logger.error("MLLM 服務健康檢查超時")
+        return False
+    except Exception as e:
+        logger.error(f"MLLM 服務健康檢查錯誤: {str(e)}")
+        return False
+
 # 請求模型
 class OCRRequest(BaseModel):
     key_list: List[str]
@@ -183,7 +214,7 @@ async def call_clip_service(pdf_file_path: str, positive_templates: List[UploadF
             result.get('voided_pages_checked', [])
         )
 
-def perform_ocr_on_file(
+async def perform_ocr_on_file(
     file_path: str,
     key_list_parsed: list,
     original_filename: str,
@@ -194,6 +225,7 @@ def perform_ocr_on_file(
     use_seal_recognition: bool = False,
     use_table_recognition: bool = True,
     use_llm: bool = True,
+    use_mllm: bool = False,
 ):
     """
     對檔案執行 OCR 處理的核心邏輯
@@ -206,6 +238,13 @@ def perform_ocr_on_file(
     Returns:
         處理結果字典
     """
+    # 如果啟用 MLLM，先檢查服務是否可用
+    if use_mllm and use_llm:
+        logger.info("檢查 MLLM 服務健康狀態...")
+        mllm_healthy = await check_mllm_health()
+        if not mllm_healthy:
+            logger.warning("MLLM 服務不可用，將退回使用標準 LLM")
+            use_mllm = False
     # 執行視覺預測
     visual_predict_res = pipeline.visual_predict(
         input=file_path,
@@ -232,16 +271,44 @@ def perform_ocr_on_file(
             if file.endswith('.png'):
                 output_images.append(file)
 
+    
+
     # 執行聊天查詢
+    chat_result = {}
     if use_llm:
-        chat_result = pipeline.chat(
-            key_list=key_list_parsed,
-            visual_info=visual_info_list
-        )
+        if use_mllm:
+            logger.info("使用 MLLM 進行多模態預測...")
+            try:
+                mllm_predict_res = pipeline.mllm_pred(
+                    input=file_path,
+                    key_list=key_list_parsed,
+                )
+                mllm_predict_info = mllm_predict_res["mllm_res"]
+                logger.info("MLLM 預測完成，整合到聊天結果...")
+            
+                chat_result = pipeline.chat(
+                    key_list=key_list_parsed,
+                    visual_info=visual_info_list,
+                    mllm_predict_info=mllm_predict_info,
+                )
+                logger.info("MLLM 整合聊天完成")
+            except Exception as e:
+                logger.error(f"MLLM 處理失敗: {str(e)}，退回標準 LLM")
+                chat_result = pipeline.chat(
+                    key_list=key_list_parsed,
+                    visual_info=visual_info_list,
+                )
+        else:
+            logger.info("使用標準 LLM 進行關鍵字提取...")
+            chat_result = pipeline.chat(
+                key_list=key_list_parsed,
+                visual_info=visual_info_list,
+            )
+            logger.info("標準 LLM 提取完成")
 
     # 組合回應資料
     response_data = {
-        "chat_result": chat_result["chat_res"] if use_llm else None,
+        "chat_result": chat_result.get("chat_res") if use_llm else None,
         "visual_info_list": visual_info_list,
         "key_list": key_list_parsed,
         "output_images": output_images,
@@ -252,7 +319,8 @@ def perform_ocr_on_file(
             "use_textline_orientation": use_textline_orientation,
             "use_seal_recognition": use_seal_recognition,
             "use_table_recognition": use_table_recognition,
-            "use_llm": use_llm
+            "use_llm": use_llm,
+            "use_mllm": use_mllm
         }
     }
 
@@ -273,6 +341,7 @@ async def process_ocr(
     use_seal_recognition: bool = Form(False),
     use_table_recognition: bool = Form(True),
     use_llm: bool = Form(True),
+    use_mllm: bool = Form(False),
 ):
     """處理圖片 OCR 請求"""
     temp_file_path = None
@@ -308,7 +377,7 @@ async def process_ocr(
         logger.info(f"開始 OCR 處理 - 任務ID: {task_id}, 檔案大小: {len(content)} bytes")
 
         # 調用核心 OCR 處理函數
-        response_data = perform_ocr_on_file(
+        response_data = await perform_ocr_on_file(
             file_path=temp_file_path,
             key_list_parsed=key_list_parsed,
             original_filename=file.filename,
@@ -318,7 +387,8 @@ async def process_ocr(
             use_textline_orientation=use_textline_orientation,
             use_seal_recognition=use_seal_recognition,
             use_table_recognition=use_table_recognition,
-            use_llm=use_llm
+            use_llm=use_llm,
+            use_mllm=use_mllm
         )
 
         # 保存 response_data 到 JSON 檔案
@@ -377,6 +447,7 @@ async def process_ocr_with_matching(
     negative_threshold: float = Form(0.30),
     skip_voided: bool = Form(False),
     top_n_for_void_check: int = Form(5),
+    use_mllm: bool = Form(False),
 ):
     """
     處理 PDF 頁面匹配和 OCR 請求
@@ -437,7 +508,7 @@ async def process_ocr_with_matching(
         best_page_image.save(matched_page_path, 'PNG')
 
         # 調用核心 OCR 處理函數
-        ocr_response_data = perform_ocr_on_file(
+        ocr_response_data = await perform_ocr_on_file(
             file_path=matched_page_path,
             key_list_parsed=key_list_parsed,
             original_filename=pdf_file.filename,
@@ -447,7 +518,8 @@ async def process_ocr_with_matching(
             use_textline_orientation=use_textline_orientation,
             use_seal_recognition=use_seal_recognition,
             use_table_recognition=use_table_recognition,
-            use_llm=use_llm
+            use_llm=use_llm,
+            use_mllm=use_mllm
         )
 
         # 在 OCR 結果中添加頁面匹配資訊
@@ -795,7 +867,8 @@ async def configure_stage2(
     use_textline_orientation: bool = Form(False),
     use_seal_recognition: bool = Form(False),
     use_table_recognition: bool = Form(True),
-    use_llm: bool = Form(True)
+    use_llm: bool = Form(True),
+    use_mllm: bool = Form(False),
 ):
     """配置第二階段參數"""
     try:
@@ -809,7 +882,8 @@ async def configure_stage2(
             'use_textline_orientation': use_textline_orientation,
             'use_seal_recognition': use_seal_recognition,
             'use_table_recognition': use_table_recognition,
-            'use_llm': use_llm
+            'use_llm': use_llm,
+            'use_mllm': use_mllm
         }
 
         batch_db.save_task_stage2_config(task_id, config, keywords_list)
